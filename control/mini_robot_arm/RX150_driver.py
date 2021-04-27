@@ -169,13 +169,37 @@ if __name__ == "__main__":
     rx150 = RX150_Driver(port="/dev/ttyACM0", baudrate=1000000)
     print(rx150.readpos())
 
+    # rx150.torque(enable=1)
+    # g_open = 1100
+    # values = [2048, 2549, 1110, 1400, 3072, g_open]
+    # x = 330
+    # y = 85
+    # end_angle = -30. / 180. * np.pi
+    # rx150.gogo(values, x, y, end_angle, 320, 90, end_angle, 3072, timestamp=300)
+
     rx150.torque(enable=1)
     g_open = 1100
     values = [2048, 2549, 1110, 1400, 3072, g_open]
     x = 330
     y = 85
-    end_angle = -30. / 180. * np.pi
-    rx150.gogo(values, x, y, end_angle, 320, 90, end_angle, 3072, timestamp=300)
+    end_angle = 85. / 180. * np.pi
+    rx150.gogo(values, x, y, end_angle, 360, 30, end_angle, 3072, timestamp=300)
+
+    # rx150.torque(enable=1)
+    # g_open = 1100
+    # values = [2048, 2549, 1110, 1400, 3072, g_open]
+    # x = 330
+    # y = 85
+    # end_angle = -80. / 180. * np.pi
+    # rx150.gogo(values, x, y, end_angle, 215, 210, end_angle, 3072, timestamp=300)
+
+    # rx150.torque(enable=1)
+    # g_open = 1100
+    # values = [2048, 2549, 1110, 1400, 3072, g_open]
+    # x = 210
+    # y = 150
+    # end_angle = -50. / 180. * np.pi
+    # rx150.gogo(values, x, y, end_angle, 220, 140, end_angle, 3072, timestamp=300)
 
     c = input()
 

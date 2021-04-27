@@ -79,7 +79,7 @@ class Pose(Thread):
 
 
         dx = dx / (1 - dx ** 2) ** 0.5 / 32
-        dy = dy / (1 - dy ** 2) ** 0.5 / 32 
+        dy = dy / (1 - dy ** 2) ** 0.5 / 32
 
         # dx = (diff[:,:,2] * cos(pi/6) - diff[:,:,0] * cos(pi/6)) / 255.
         # dy = (diff[:,:,0] * sin(pi/6) + diff[:,:,2] * sin(pi/6) - diff[:,:,1]) / 255.
@@ -92,6 +92,38 @@ class Pose(Thread):
 
         zeros = np.zeros_like(dx)
         return poisson_reconstruct(dy, dx, zeros)
+
+    def draw_ellipse(self, frame, pose):
+        v_max, v_min, w_max, w_min, m = pose
+        lineThickness = 2
+        K = 1
+
+        w_max = w_max ** 0.5 / 20 * K
+        w_min = w_min ** 0.5 / 30 * K
+
+        v_max = v_max.reshape(-1) * w_max
+        v_min = v_min.reshape(-1) * w_min
+
+
+        m1 = m - v_min
+        mv = m + v_min
+        cv2.line(frame, (int(m1[0]), int(m1[1])), (int(mv[0]), int(mv[1])),
+                 (0,255,0), lineThickness)
+
+        m1 = m - v_max
+        # mv = m
+        mv = m + v_max
+
+        cv2.line(frame, (int(m1[0]), int(m1[1])), (int(mv[0]), int(mv[1])),
+                 (0,0,255), lineThickness)
+
+        theta = acos(v_max[0]/(v_max[0]**2+v_max[1]**2)**0.5)
+        length_max = w_max
+        length_min = w_min
+        axis = (int(length_max), int(length_min))
+
+        cv2.ellipse(frame, (int(m[0]), int(m[1])), axis, -theta/pi*180, 0, 360, (255, 255, 255), lineThickness)
+
 
     def get_pose(self):
 
@@ -216,10 +248,10 @@ class Pose(Thread):
 
                 lineThickness = 2
 
-                # cv2.line(frame, (frame0.shape[1]//2, frame0.shape[0]*2//3), (int(cable_out[0]), int(cable_out[1])), 
+                # cv2.line(frame, (frame0.shape[1]//2, frame0.shape[0]*2//3), (int(cable_out[0]), int(cable_out[1])),
                          # (0,255,255), lineThickness)
 
-                # cv2.line(frame, (int(self.mv[0]), int(self.mv[1])), (frame0.shape[1], frame0.shape[0]*2//4), 
+                # cv2.line(frame, (int(self.mv[0]), int(self.mv[1])), (frame0.shape[1], frame0.shape[0]*2//4),
                 #          (255,0,0), lineThickness)
 
 
@@ -232,7 +264,7 @@ class Pose(Thread):
 
                 m1 = m - v_min / 1.
                 mv = m + v_min / 1.
-                cv2.line(diff, (int(m1[0]), int(m1[1])), (int(mv[0]), int(mv[1])), 
+                cv2.line(diff, (int(m1[0]), int(m1[1])), (int(mv[0]), int(mv[1])),
                          (0,255,0), lineThickness)
 
                 m1 = m - v_max / 1.
@@ -240,14 +272,14 @@ class Pose(Thread):
                 mv = m + v_max / 1.
 
                 theta = math.atan2(v_max[1], v_max[0]) / pi * 180
-                cv2.line(diff, (int(m1[0]), int(m1[1])), (int(mv[0]), int(mv[1])), 
+                cv2.line(diff, (int(m1[0]), int(m1[1])), (int(mv[0]), int(mv[1])),
                          (0,0,255), lineThickness)
-               
-                cv2.ellipse(diff, (int(m[0]), int(m[1])), (int(np.sum(v_max**2)**0.5), int(np.sum(v_min**2)**0.5)), 
-                           theta, 0, 360, (255, 255, 255) , 2) 
+
+                cv2.ellipse(diff, (int(m[0]), int(m[1])), (int(np.sum(v_max**2)**0.5), int(np.sum(v_min**2)**0.5)),
+                           theta, 0, 360, (255, 255, 255) , 2)
 
 
-                # cv2.line(frame_large, (int(m1[0]*K), int(m1[1]*K)), (int(mv[0]*K), int(mv[1]*K)), 
+                # cv2.line(frame_large, (int(m1[0]*K), int(m1[1]*K)), (int(mv[0]*K), int(mv[1]*K)),
                 #          (0,0,255), lineThickness)
             else:
                 # No contact

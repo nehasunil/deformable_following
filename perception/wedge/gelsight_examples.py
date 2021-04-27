@@ -11,7 +11,8 @@ from gelsight.util.Vis3D import ClassVis3D
 from gelsight.gelsight_driver import GelSight
 
 # sensor_id = "W03"
-sensor_id = "Fabric0"
+# sensor_id = "Fabric0"
+sensor_id = "cable_0"
 
 IP = "http://rpigelsightfabric.local"
 

@@ -12,7 +12,7 @@ import urllib
 import _thread
 from gelsight.util.streaming import Streaming
 
-sensor_id = "fabric_0"
+sensor_id = "cable_0"
 
 # field names
 fields = ["Name", "x", "y"]

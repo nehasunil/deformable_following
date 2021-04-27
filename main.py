@@ -21,8 +21,8 @@ pose2 = np.array([-0.481, 0.283, 0.359, -1.216, -1.480, -.8])
 grc.follow_gripper_pos = 0
 #
 #
-# a = 0.05
-# v = 0.05
+a = 0.05
+v = 0.05
 # urc.movel_wait(pose0, a=a, v=v)
 # #
 # c = input()
@@ -50,9 +50,9 @@ grc.follow_gripper_pos = 0
 #     time.sleep(dt)
 
 print(', '.join([str("{:.3f}".format(_)) for _ in urc.getl_rt()]))
-time.sleep(0.01)
-
-urc.flag_terminate = True
-# grc.flag_terminate = True
-urc.join()
+# time.sleep(0.01)
+#
+# urc.flag_terminate = True
+# # grc.flag_terminate = True
+# urc.join()
 # grc.join()

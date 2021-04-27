@@ -6,12 +6,17 @@ import cv2
 import numpy as np
 from math import pi, sin, cos, asin, acos
 import csv
+import random
 from perception.wedge.gelsight.util.Vis3D import ClassVis3D
 
 from perception.wedge.gelsight.gelsight_driver import GelSight
 from control.gripper.gripper_control import Gripper_Controller
 from control.ur5.ur_controller import UR_Controller
 from control.mini_robot_arm.RX150_driver import RX150_Driver
+
+import keyboard
+from queue import Queue
+from logger_class import Logger
 
 import collections
 
@@ -23,7 +28,9 @@ grc.start()
 
 # pose0 = np.array([-0.51, 0.376, 0.409, -1.416, -1.480, -1.031])
 # pose0 = np.array([-0.539, 0.312, 0.29, -1.787, -1.604, -0.691])
-pose0 = np.array([-0.520, -0.219, 0.235, -1.129, -1.226, 1.326])
+# pose0 = np.array([-0.520, -0.219, 0.235, -1.129, -1.226, 1.326])
+# pose0 = np.array([-0.382, -0.246, 0.372, -1.129, -1.226, 1.326]) # vertical
+pose0 = np.array([-0.536, -0.227, 0.092, -1.129, -1.226, 1.326]) # downward
 grc.gripper_helper.set_gripper_current_limit(0.6)
 
 
@@ -33,15 +40,16 @@ print(rx150.readpos())
 
 def rx_move(g_open):
     values = [2048, 2549, 1110, 1400, 3072, g_open]
-    x = 320
-    y = 90
-    end_angle = -30. / 180. * np.pi
-    rx150.gogo(values, x, y, end_angle, 320, 90, end_angle, 3072, timestamp=30)
+    x = 360
+    y = 30
+    end_angle = 85. / 180. * np.pi
+    rx150.gogo(values, x, y, end_angle, 360, 30, end_angle, 3072, timestamp=300)
 
 # rx_move(2000)
 
 # sensor_id = "W03"
-sensor_id = "Fabric0"
+# sensor_id = "Fabric0"
+sensor_id = "cable_0"
 
 IP = "http://rpigelsightfabric.local"
 
@@ -69,6 +77,9 @@ corners = tuple(read_csv())
 # corners=((252, 137), (429, 135), (197, 374), (500, 380))
 
 
+grc.follow_gripper_pos = 0.7
+time.sleep(0.5)
+
 gs = GelSight(
     IP=IP,
     corners=corners,
@@ -81,28 +92,29 @@ gs.start()
 
 def test_combined():
 
-
-    grc.follow_gripper_pos = 0.7
     # grc.follow_gripper_pos = 1
     a = 0.15
     v = 0.08
     urc.movel_wait(pose0, a=a, v=v)
-    rx_move(1200)
+    urc.pose = pose0.copy()
+    rx_move(790)
     c = input()
 
-    rx_move(830)
-    grc.follow_gripper_pos = 1
+    rx_move(790)
+    grc.follow_gripper_pos = 0.965
     time.sleep(0.5)
 
     depth_queue = []
 
     cnt = 0
     dt = 0.05
-    pos_x = 0.5
-    # dt = 0.5
-    # dy = 0.002
-    # dz = 0.004
-    # th = np.arctan(dy/dz)\
+
+    tm_key = time.time()
+    logger = Logger()
+    noise_acc = 0.
+    flag_record = False
+    tm = 0
+    start_tm = time.time()
 
     vel = [0.00, 0.008, 0, 0, 0, 0]
 
@@ -125,35 +137,38 @@ def test_combined():
         # if depth_current == np.max(depth_queue):
         pose = gs.pc.pose
         cv2.imshow("pose", pose_img)
+        cv2.waitKey(1)
+
 
         if gs.pc.inContact:
 
-            # if cnt % 4 < 2:
-            #     # grc.follow_gripper_pos = 1
-            #     rx_move(810)
-            # else:
+            if pose is not None:
+                v_max, v_min, w_max, w_min, m = pose
+                theta = acos(v_max[0]/(np.sum(v_max**2)**0.5))
+                if theta > pi / 2:
+                    theta -= pi
+                if theta > pi / 3 or theta < -pi / 3 or w_max < w_min * 1.5:
+                    theta = 0.
+                x = gs.pc.mv_relative[0]
+                # print(x, theta)
+
+            else:
+                gs.pc.inContact = False
+                print("no pose estimate")
+                print("log saved: ", logger.save_logs())
+                continue
+
             a = 0.02
             v = 0.02
-            kp = .03
-            # kp_rot = .2
+            kp = -.0002
 
-            # pos_x = (2*pose[0] + (1 - pose[1])*np.tan(pose[2]))/2
-            pos_x = (pose[0] + (1 - pose[1])*np.tan(pose[2]))
-            # pos_x = pose[0]
-            # e = (pos_x-0.5)*kp
-
-
-            # vel = [0, (pos_x-0.3)*kp, -0.008, 0, 0, 0]
-            # vel = [0, (pos_x-0.6)*kp, -0.008, kp_rot*gs.pc.pose[2], 0, 0]
-            # vel = [0, e*np.cos(th) - dy, -e*np.sin(th) - dz, kp_rot*gs.pc.pose[2], 0, 0]
-            vel = [(pos_x-0.2)*kp, 0.008, -(pos_x-0.2)*kp*.2, 0, 0, 0]
+            noise = random.random() * 0.03 - 0.015
+            a = 0.8
+            noise_acc = a * noise_acc + (1-a) * noise
+            vel = [x*kp+noise_acc, 0.01, 0, 0, 0, 0]
             vel = np.array(vel)
 
-            # grc.follow_gripper_pos = .885
-            # grc.follow_gripper_pos = .88
-            # rx_move(830)
-            # urc.speedl([(pose[0]-0.2)*kp, 0.008, 0, 0, 0, 0], a=a, t=dt*2)
-
+            # Workspace Bounds
             ur_pose = urc.getl_rt()
             if ur_pose[0] < -0.7:
                 vel[0] = max(vel[0], 0.)
@@ -161,41 +176,53 @@ def test_combined():
                 vel[0] = min(vel[0], 0.)
             if ur_pose[2] < .08:
                 vel[2] = 0.
-            if ur_pose[1] > .3:
+            if ur_pose[1] > .34:
+                print("end of workspace")
+                print("log saved: ", logger.save_logs())
+                gs.pc.inContact = False
                 vel[0] = min(vel[0], 0.)
                 vel[1] = 0.
 
-
-            print("sliding vel ", vel[0], "posx ", pos_x)
-
             vel = np.array(vel)
-            # urc.speedl(vel, a=a, t=dt*2)
+            urc.speedl(vel, a=a, t=dt*2)
 
             time.sleep(dt)
-
-        # # get tracking image
-        # tracking_img = gs.tc.tracking_img
-        # if tracking_img is None:
-        #     continue
-
-
-        # slip_index_realtime = gs.tc.slip_index_realtime
-        # print("slip_index_realtime", slip_index_realtime)
-
-
-        # cv2.imshow("marker", tracking_img[:, ::-1])
-        # cv2.imshow("diff", gs.tc.diff_raw[:, ::-1] / 255)
-
-        # if urc.getl_rt()[0] < -.45:
-        #     break
-
-
-
-        # cnt += 1
 
         c = cv2.waitKey(1) & 0xFF
         if c == ord("q"):
             break
+
+    ##################################################################
+    # Record data
+        # 'gelsight_url'  : self.gelsight_url,
+        # 'fabric_pose'   : self.fabric_pose,
+        # 'ur_velocity'   : self.ur_velocity,
+        # 'ur_pose'       : self.ur_pose,
+        # 'slip_index'    : self.slip_index,
+        # 'x'             : self.x,
+        # 'y'             : self.x,
+        # 'theta'         : self.theta,
+        # 'phi'           : self.phi,
+        # 'dt'            : self.dt
+
+        if gs.pc.inContact:
+            logger.gelsight = gs.pc.diff
+            logger.cable_pose = pose
+            logger.ur_velocity = vel
+            logger.ur_pose = urc.getl_rt()
+
+            v = np.array([logger.ur_velocity[0], logger.ur_velocity[1]])
+            alpha = asin(v[1] / np.sum(v**2)**0.5)
+
+            logger.x = x
+            logger.theta = theta
+            logger.phi = alpha - logger.theta
+
+            logger.dt = time.time() - tm
+            tm = time.time()
+
+            logger.add()
+        ##################################################################
 
 
 if __name__ == "__main__":
