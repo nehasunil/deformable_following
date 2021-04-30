@@ -169,6 +169,7 @@ class Pose(Thread):
             bias = 1
 
             diff = (frame * 1.0 - frame0) * 4 + 127
+            # diff = diff[::-1, :, :]
             trim(diff)
 
             self.diff_raw = diff.copy()
@@ -230,7 +231,7 @@ class Pose(Thread):
                 # for manipulation
                 # self.mv = np.mean(pts, 0)
                 self.mv = np.mean(pts, 0)
-                self.mv_relative = self.mv - [frame0.shape[1] / 3, frame0.shape[0] *2]
+                self.mv_relative = self.mv - [frame0.shape[1] / 3, frame0.shape[0] / 2]
                 self.vr = self.mv - [frame0.shape[1], frame0.shape[0]*2/4]
                 self.theta_to_middle_right = asin(self.vr[1] / np.sum(self.vr**2)**0.5)
                 # print("theta_to_middle_right", self.theta_to_middle_right/pi*180, )
@@ -258,7 +259,7 @@ class Pose(Thread):
 
 
             self.depth = depth
-            self.pose_img = diff / 255.
+            self.pose_img = diff[::-1] / 255.
             # self.pose_img = frame[::-1, ::-1]
             self.diff = diff
             self.bias = bias

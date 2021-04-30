@@ -30,7 +30,8 @@ grc.start()
 # pose0 = np.array([-0.539, 0.312, 0.29, -1.787, -1.604, -0.691])
 # pose0 = np.array([-0.520, -0.219, 0.235, -1.129, -1.226, 1.326])
 # pose0 = np.array([-0.382, -0.246, 0.372, -1.129, -1.226, 1.326]) # vertical
-pose0 = np.array([-0.536, -0.227, 0.092, -1.129, -1.226, 1.326]) # downward
+pose0 = np.array([-0.556, -0.227, 0.092, -1.129, -1.226, 1.326]) # downward
+pose_prep = np.array([-0.435, -0.187, 0.155, -1.609, -1.661, 0.995])
 grc.gripper_helper.set_gripper_current_limit(0.6)
 
 
@@ -95,8 +96,9 @@ def test_combined():
     # grc.follow_gripper_pos = 1
     a = 0.15
     v = 0.08
+    urc.movel_wait(pose_prep, a=a, v=v)
+    time.sleep(0.5)
     urc.movel_wait(pose0, a=a, v=v)
-    urc.pose = pose0.copy()
     rx_move(790)
     c = input()
 
@@ -144,28 +146,29 @@ def test_combined():
 
             if pose is not None:
                 v_max, v_min, w_max, w_min, m = pose
-                theta = acos(v_max[0]/(np.sum(v_max**2)**0.5))
+                # theta = acos(v_max[0]/(np.sum(v_max**2)**0.5))
+                theta = asin(-v_max[0]/(np.sum(v_max**2)**0.5))
                 if theta > pi / 2:
                     theta -= pi
                 if theta > pi / 3 or theta < -pi / 3 or w_max < w_min * 1.5:
                     theta = 0.
-                x = gs.pc.mv_relative[0]
-                # print(x, theta)
+                xy = -gs.pc.mv_relative
+                # print("xy: ", xy, "theta: ", theta *180/np.pi)
 
             else:
                 gs.pc.inContact = False
                 print("no pose estimate")
-                print("log saved: ", logger.save_logs())
+                # print("log saved: ", logger.save_logs())
                 continue
 
             a = 0.02
             v = 0.02
-            kp = -.0002
+            kp = .0002
 
             noise = random.random() * 0.03 - 0.015
             a = 0.8
             noise_acc = a * noise_acc + (1-a) * noise
-            vel = [x*kp+noise_acc, 0.01, 0, 0, 0, 0]
+            vel = [xy[0]*kp+noise_acc, 0.01, 0, 0, 0, 0]
             vel = np.array(vel)
 
             # Workspace Bounds
@@ -178,7 +181,7 @@ def test_combined():
                 vel[2] = 0.
             if ur_pose[1] > .34:
                 print("end of workspace")
-                print("log saved: ", logger.save_logs())
+                # print("log saved: ", logger.save_logs())
                 gs.pc.inContact = False
                 vel[0] = min(vel[0], 0.)
                 vel[1] = 0.
@@ -187,6 +190,7 @@ def test_combined():
             urc.speedl(vel, a=a, t=dt*2)
 
             time.sleep(dt)
+            # cnt += 1
 
         c = cv2.waitKey(1) & 0xFF
         if c == ord("q"):
@@ -205,18 +209,19 @@ def test_combined():
         # 'phi'           : self.phi,
         # 'dt'            : self.dt
 
-        if gs.pc.inContact:
+        if gs.pc.inContact and cnt > 100:
+            print("LOGGING")
             logger.gelsight = gs.pc.diff
-            logger.cable_pose = pose
+            # logger.cable_pose = pose
             logger.ur_velocity = vel
             logger.ur_pose = urc.getl_rt()
 
             v = np.array([logger.ur_velocity[0], logger.ur_velocity[1]])
             alpha = asin(v[1] / np.sum(v**2)**0.5)
 
-            logger.x = x
+            logger.x = xy
             logger.theta = theta
-            logger.phi = alpha - logger.theta
+            # logger.phi = alpha - logger.theta
 
             logger.dt = time.time() - tm
             tm = time.time()
