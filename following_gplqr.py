@@ -10,15 +10,76 @@ import random
 from perception.wedge.gelsight.util.Vis3D import ClassVis3D
 
 from perception.wedge.gelsight.gelsight_driver import GelSight
-from control.gripper.gripper_control import Gripper_Controller
-from control.ur5.ur_controller import UR_Controller
-from control.mini_robot_arm.RX150_driver import RX150_Driver
+from controller.gripper.gripper_control import Gripper_Controller
+from controller.ur5.ur_controller import UR_Controller
+from controller.mini_robot_arm.RX150_driver import RX150_Driver
+
+import GPy
+from load_data import loadall
+import control as ctrl
+import slycot
 
 import keyboard
 from queue import Queue
 from logger_class import Logger
 
 import collections
+
+
+X, Y = loadall()
+
+N = X.shape[0]
+print(N)
+idx = list(range(N))
+random.seed(0)
+random.shuffle(idx)
+
+train_idx = idx[:int(N * 0.8)]
+test_idx = idx[int(N * 0.8):]
+
+X_train, Y_train = X[train_idx], Y[train_idx]
+
+kernel1 = GPy.kern.Matern32(input_dim=4,ARD=True,initialize=False)
+m1 = GPy.models.SparseGPRegression(X_train, Y_train[:, 0].reshape(Y_train.shape[0], 1), kernel1, num_inducing=1000, initialize=False)
+m1.update_model(False)
+m1.initialize_parameter()
+m1[:] = np.load('./controller/GP/m1_m32_a_sparse_1000i_20.npy')
+m1.update_model(True)
+# m.initialize_parameter()
+# mu,var = m.predict(X_test)
+
+kernel2 = GPy.kern.Exponential(input_dim=4, ARD=True, initialize=False)
+m2 = GPy.models.SparseGPRegression(X_train, Y_train[:, 1].reshape(Y_train.shape[0], 1), kernel2, num_inducing=1000, initialize=False)
+m2.update_model(False)
+m2.initialize_parameter()
+m2[:] = np.load('./controller/GP/m2_exp_a_sparse_1000i_20.npy')
+m2.update_model(True)
+
+kernel3 = GPy.kern.Matern52(input_dim=4, ARD=True, initialize=False)
+m3 = GPy.models.SparseGPRegression(X_train, Y_train[:, 2].reshape(Y_train.shape[0], 1), kernel3, num_inducing=1000, initialize=False)
+m3.update_model(False)
+m3.initialize_parameter()
+m3[:] = np.load('./controller/GP/m3_exp_a_sparse_1000i_20.npy')
+m3.update_model(True)
+
+def tv_linA(x):
+    m = 3
+    model = [m1, m2, m3]
+    A = np.zeros((m, m))
+    for i in range(m):
+        grad = model[i].predictive_gradients(np.array(x).T)
+        for j in range(m):
+            A[i][j] = grad[0][0][j]
+    return A
+
+def tv_linB(x):
+    m = 3
+    model = [m1, m2, m3]
+    B = np.zeros((m, 1))
+    for i in range(m):
+        grad = model[i].predictive_gradients(np.array(x).T)
+        B[i, 0] = grad[0][0][3]
+    return B
 
 urc = UR_Controller()
 grc = Gripper_Controller()
@@ -30,7 +91,7 @@ grc.start()
 # pose0 = np.array([-0.539, 0.312, 0.29, -1.787, -1.604, -0.691])
 # pose0 = np.array([-0.520, -0.219, 0.235, -1.129, -1.226, 1.326])
 # pose0 = np.array([-0.382, -0.246, 0.372, -1.129, -1.226, 1.326]) # vertical
-pose0 = np.array([-0.55, -0.227, 0.092, -1.129, -1.226, 1.326]) # downward
+pose0 = np.array([-0.539, -0.226, 0.092, -1.129, -1.226, 1.326]) # downward
 pose_prep = np.array([-0.435, -0.187, 0.155, -1.609, -1.661, 0.995])
 grc.gripper_helper.set_gripper_current_limit(0.6)
 
@@ -96,8 +157,8 @@ def test_combined():
     # grc.follow_gripper_pos = 1
     a = 0.15
     v = 0.08
-    urc.movel_wait(pose_prep, a=a, v=v)
-    time.sleep(0.5)
+    # urc.movel_wait(pose_prep, a=a, v=v)
+    # time.sleep(0.5)
     urc.movel_wait(pose0, a=a, v=v)
     rx_move(790)
     c = input()
@@ -164,15 +225,25 @@ def test_combined():
                 cable_real_xy = np.array(ur_xy) + np.array([0., -0.382]) + cable_xy*pixel_size
                 alpha = np.arctan((cable_real_xy[1] - fixpoint_y)/(cable_real_xy[0] - fixpoint_x))
 
-                K = np.array([-380.78, 8.82, -2.41])
+                # K = np.array([-372.25, 8.62, -1.984]) # linear regression
+                # K = np.array([-923.3, 22.1, -19.65]) # GP regression linearized about origin
+
                 state = np.array([[cable_xy[0]*pixel_size], [theta], [alpha]])
+                Q = np.array([[1.0, 0.0, 0.0], [0.5, 0.0, 0.0], [0.0, 0.0, 0.1]])
+                R = [[0.1]]
+                x0 = np.zeros((4, 1))
+                x0[0], x0[1], x0[2] = state[0], state[1], state[2]
+                A = tv_linA(x0)
+                B = tv_linB(x0)
+                K,S,E = ctrl.lqr(A, B, Q, R)
+
                 phi = -K.dot(state)
                 target_ur_dir = phi + alpha
                 print("STATE", state)
                 print("TARGET UR DIR", target_ur_dir/pi*180)
                 limit_phi = pi / 3
                 target_ur_dir = max(-limit_phi, min(target_ur_dir, limit_phi))
-                v_norm = 0.01
+                v_norm = 0.03
                 vel = np.array([v_norm * sin(target_ur_dir), v_norm * cos(target_ur_dir), 0, 0, 0, 0])
 
             else:

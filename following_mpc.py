@@ -20,8 +20,66 @@ from logger_class import Logger
 
 import collections
 
+import GPy
+from typing import Tuple
+import torch
+from torch import Tensor
+from constrained_cem_mpc import ConstrainedCemMpc, ActionConstraint, box2torchpoly, TerminalConstraint, StateConstraint, \
+    DynamicsFunc
+
 urc = UR_Controller()
 grc = Gripper_Controller()
+
+X, Y = loadall()
+
+N = X.shape[0]
+print(N)
+idx = list(range(N))
+random.seed(0)
+random.shuffle(idx)
+
+train_idx = idx[:int(N * 0.8)]
+test_idx = idx[int(N * 0.8):]
+
+X_train, Y_train = X[train_idx], Y[train_idx]
+
+kernel1 = GPy.kern.Matern32(input_dim=4,ARD=True,initialize=False)
+m1 = GPy.models.SparseGPRegression(X_train, Y_train[:, 0].reshape(Y_train.shape[0], 1), kernel1, num_inducing=1000, initialize=False)
+m1.update_model(False)
+m1.initialize_parameter()
+m1[:] = np.load('./controller/GP/m1_m32_a_sparse_1000i_20.npy')
+m1.update_model(True)
+# m.initialize_parameter()
+# mu,var = m.predict(X_test)
+
+kernel2 = GPy.kern.Exponential(input_dim=4, ARD=True, initialize=False)
+m2 = GPy.models.SparseGPRegression(X_train, Y_train[:, 1].reshape(Y_train.shape[0], 1), kernel2, num_inducing=1000, initialize=False)
+m2.update_model(False)
+m2.initialize_parameter()
+m2[:] = np.load('./controller/GP/m2_exp_a_sparse_1000i_20.npy')
+m2.update_model(True)
+
+kernel3 = GPy.kern.Matern52(input_dim=4, ARD=True, initialize=False)
+m3 = GPy.models.SparseGPRegression(X_train, Y_train[:, 2].reshape(Y_train.shape[0], 1), kernel3, num_inducing=1000, initialize=False)
+m3.update_model(False)
+m3.initialize_parameter()
+m3[:] = np.load('./controller/GP/m3_exp_a_sparse_1000i_20.npy')
+m3.update_model(True)
+
+class Dynamics(DynamicsFunc):
+    """
+    From GP Dynamics model
+    """
+
+    def __call__(self, states: Tensor, actions: Tensor) -> Tuple[Tensor, Tensor]:
+        x = states
+        xdot =  torch.tensor([m1.predict(x[:, 0], x[:, 1], x[:, 2], actions[:])[0], m2.predict(x[:, 0], x[:, 1], x[:, 2], actions[:])[0], m3.predict(x[:, 0], x[:, 1], x[:, 2], actions[:])[0]])
+        newx = x + newthdot * dt
+
+        objective_cost = torch.zeros_like(x[:, 0])
+
+        return newx, objective_cost
+
 
 urc.start()
 grc.start()
@@ -30,8 +88,7 @@ grc.start()
 # pose0 = np.array([-0.539, 0.312, 0.29, -1.787, -1.604, -0.691])
 # pose0 = np.array([-0.520, -0.219, 0.235, -1.129, -1.226, 1.326])
 # pose0 = np.array([-0.382, -0.246, 0.372, -1.129, -1.226, 1.326]) # vertical
-# pose0 = np.array([-0.556, -0.227, 0.092, -1.129, -1.226, 1.326]) # downward
-pose0 = np.array([-0.539, -0.226, 0.092, -1.129, -1.226, 1.326])
+pose0 = np.array([-0.539, -0.226, 0.092, -1.129, -1.226, 1.326]) # downward
 pose_prep = np.array([-0.435, -0.187, 0.155, -1.609, -1.661, 0.995])
 grc.gripper_helper.set_gripper_current_limit(0.6)
 
@@ -61,6 +118,7 @@ tracking_setting = (10, 14, 5, 16, 41, 27, 27)
 
 n, m = 150, 200
 # Vis3D = ClassVis3D(m, n)
+
 
 
 def read_csv(filename=f"config_{sensor_id}.csv"):
@@ -104,7 +162,7 @@ def test_combined():
     c = input()
 
     rx_move(790)
-    grc.follow_gripper_pos = 0.97
+    grc.follow_gripper_pos = 0.965
     time.sleep(0.5)
 
     depth_queue = []
@@ -153,27 +211,60 @@ def test_combined():
                     theta -= pi
                 if theta > pi / 3 or theta < -pi / 3 or w_max < w_min * 1.5:
                     theta = 0.
-                xy = -gs.pc.mv_relative
-                print("xy: ", xy, "theta: ", theta *180/np.pi)
+                cable_xy = -gs.pc.mv_relative
+                # print("xy: ", cable_xy, "theta: ", theta *180/np.pi)
+
+                fixpoint_x = pose0[0] + 0.006
+                fixpoint_y = pose0[1] - 0.039
+                # pixel_size = 0.2e-3
+                pixel_size = 0.2e-3
+                ur_pose = urc.getl_rt()
+                ur_xy = ur_pose[:2]
+                cable_real_xy = np.array(ur_xy) + np.array([0., -0.039]) + cable_xy*pixel_size
+                alpha = np.arctan((cable_real_xy[1] - fixpoint_y)/(cable_real_xy[0] - fixpoint_x))
+
+                K = np.array([-372.25, 8.62, -1.984]) # linear regression
+                # K = np.array([-923.3, 22.1, -19.65]) # GP regression linearized about origin
+                # state = np.array([[cable_xy[0]*pixel_size], [theta], [alpha]])
+                state = torch.tensor([cable_xy[0]*pixel_size, theta, alpha], dtype=torch.double)
+                constraints = [ActionConstraint(box2torchpoly([[-pi / 3, pi / 3]])), TerminalConstraint(box2torchpoly([[-1, 1], [-pi/10, pi/10], [-pi/6, pi/6]])),  #
+                   StateConstraint(box2torchpoly([[-75, 45], [-pi / 3, pi / 3]], [-pi / 2, pi/2]))]
+                mpc = ConstrainedCemMpc(dynamics_func=Dynamics(), constraints=constraints, state_dimen=3, action_dimen=1,
+                            time_horizon=10, num_rollouts=30, num_elites=10, num_iterations=4)
+
+                # phi = -K.dot(state)
+                target_ur_dir = phi + alpha
+                print("STATE", state)
+                print("TARGET UR DIR", target_ur_dir/pi*180)
+                limit_phi = pi / 3
+                target_ur_dir = max(-limit_phi, min(target_ur_dir, limit_phi))
+                v_norm = 0.01
+                vel = np.array([v_norm * sin(target_ur_dir), v_norm * cos(target_ur_dir), 0, 0, 0, 0])
+                # if grc.follow_gripper_pos > 0.965:
+                #     grc.follow_gripper_pos -= 0.001
 
             else:
-                # gs.pc.inContact = False
+                gs.pc.inContact = False
                 print("no pose estimate")
-                # print("log saved: ", logger.save_logs())
+                # grc.follow_gripper_pos += 0.002
+                print("log saved: ", logger.save_logs())
                 continue
 
             a = 0.02
             v = 0.02
             kp = .0002
 
-            noise = random.random() * 0.03 - 0.015
-            a = 0.8
-            noise_acc = a * noise_acc + (1-a) * noise
-            vel = [xy[0]*kp+noise_acc, 0.01, 0, 0, 0, 0]
-            vel = np.array(vel)
+            # noise = random.random() * 0.03 - 0.015
+            # a = 0.8
+            # noise_acc = a * noise_acc + (1-a) * noise
+            # vel = [cable_xy[0]*kp+noise_acc, 0.01, 0, 0, 0, 0]
+            # vel = np.array(vel)
 
             # Workspace Bounds
-            ur_pose = urc.getl_rt()
+            # ur_pose = urc.getl_rt()
+            if vel[1] < 0:
+                print("going the wrong way!")
+                vel[1] = max(vel[1], 0.)
             if ur_pose[0] < -0.7:
                 vel[0] = max(vel[0], 0.)
             if ur_pose[0] > -0.3:
@@ -182,13 +273,14 @@ def test_combined():
                 vel[2] = 0.
             if ur_pose[1] > .34:
                 print("end of workspace")
-                # print("log saved: ", logger.save_logs())
+                print("log saved: ", logger.save_logs())
                 gs.pc.inContact = False
                 vel[0] = min(vel[0], 0.)
                 vel[1] = 0.
 
-            # vel = np.array(vel)
-            # urc.speedl(vel, a=a, t=dt*2)
+            vel = np.array(vel)
+            urc.speedl(vel, a=a, t=dt*2)
+            print(vel)
 
             time.sleep(dt)
             # cnt += 1
@@ -211,7 +303,6 @@ def test_combined():
         # 'dt'            : self.dt
 
         if gs.pc.inContact:
-            # print("LOGGING")
             logger.gelsight = gs.pc.diff
             # logger.cable_pose = pose
             logger.ur_velocity = vel
@@ -220,7 +311,7 @@ def test_combined():
             v = np.array([logger.ur_velocity[0], logger.ur_velocity[1]])
             alpha = asin(v[1] / np.sum(v**2)**0.5)
 
-            logger.x = xy
+            logger.x = cable_xy
             logger.theta = theta
             # logger.phi = alpha - logger.theta
 
