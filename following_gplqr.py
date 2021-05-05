@@ -216,14 +216,14 @@ def test_combined():
                 cable_xy = -gs.pc.mv_relative
                 # print("xy: ", cable_xy, "theta: ", theta *180/np.pi)
 
-                fixpoint_x = pose0[0] + 0.0172
-                fixpoint_y = pose0[1] - 0.382
+                fixpoint_x = pose0[0] + 0.006
+                fixpoint_y = pose0[1] - 0.039
                 # pixel_size = 0.2e-3
                 pixel_size = 0.2e-3
                 ur_pose = urc.getl_rt()
                 ur_xy = ur_pose[:2]
-                cable_real_xy = np.array(ur_xy) + np.array([0., -0.382]) + cable_xy*pixel_size
-                alpha = np.arctan((cable_real_xy[1] - fixpoint_y)/(cable_real_xy[0] - fixpoint_x))
+                cable_real_xy = np.array(ur_xy) + np.array([0., -0.039]) + cable_xy*pixel_size
+                alpha = np.arctan((cable_real_xy[0] - fixpoint_x)/(cable_real_xy[1] - fixpoint_y))
 
                 # K = np.array([-372.25, 8.62, -1.984]) # linear regression
                 # K = np.array([-923.3, 22.1, -19.65]) # GP regression linearized about origin

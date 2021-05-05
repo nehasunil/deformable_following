@@ -221,7 +221,7 @@ def test_combined():
                 ur_pose = urc.getl_rt()
                 ur_xy = ur_pose[:2]
                 cable_real_xy = np.array(ur_xy) + np.array([0., -0.039]) + cable_xy*pixel_size
-                alpha = np.arctan((cable_real_xy[1] - fixpoint_y)/(cable_real_xy[0] - fixpoint_x))
+                alpha = np.arctan((cable_real_xy[0] - fixpoint_x)/(cable_real_xy[1] - fixpoint_y))
 
                 K = np.array([-372.25, 8.62, -1.984]) # linear regression
                 # K = np.array([-923.3, 22.1, -19.65]) # GP regression linearized about origin

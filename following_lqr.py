@@ -162,9 +162,12 @@ def test_combined():
                 ur_pose = urc.getl_rt()
                 ur_xy = ur_pose[:2]
                 cable_real_xy = np.array(ur_xy) + np.array([0., -0.039]) + cable_xy*pixel_size
-                alpha = np.arctan((cable_real_xy[1] - fixpoint_y)/(cable_real_xy[0] - fixpoint_x))
+                alpha = np.arctan((cable_real_xy[0] - fixpoint_x)/(cable_real_xy[1] - fixpoint_y))
 
-                K = np.array([-372.25, 8.62, -1.984]) # linear regression
+                # K = np.array([-778.8, 1.8188, 4.656]) # linear regression Q = 1, 1, 0.1
+                # K = np.array([-775.1, 1.7560, 4.644]) # linear regression Q = 1, 0.8, 0.1
+                # K = np.array([-769.4, 1.659, 4.626]) # linear regression Q = 1, 0.8, 0.1
+                K = np.array([-180.57, 10.44, 1.758]) # GP linearized at origin Q = 1, 0.8, 0.1, 200 inducing
                 # K = np.array([-923.3, 22.1, -19.65]) # GP regression linearized about origin
                 state = np.array([[cable_xy[0]*pixel_size], [theta], [alpha]])
                 phi = -K.dot(state)
@@ -173,16 +176,16 @@ def test_combined():
                 print("TARGET UR DIR", target_ur_dir/pi*180)
                 limit_phi = pi / 3
                 target_ur_dir = max(-limit_phi, min(target_ur_dir, limit_phi))
-                v_norm = 0.01
+                v_norm = 0.04
                 vel = np.array([v_norm * sin(target_ur_dir), v_norm * cos(target_ur_dir), 0, 0, 0, 0])
                 # if grc.follow_gripper_pos > 0.965:
                 #     grc.follow_gripper_pos -= 0.001
 
             else:
-                gs.pc.inContact = False
+                # gs.pc.inContact = False
                 print("no pose estimate")
                 # grc.follow_gripper_pos += 0.002
-                print("log saved: ", logger.save_logs())
+                # print("log saved: ", logger.save_logs())
                 continue
 
             a = 0.02
@@ -202,18 +205,21 @@ def test_combined():
                 vel[1] = max(vel[1], 0.)
             if ur_pose[0] < -0.7:
                 vel[0] = max(vel[0], 0.)
+                print("hit workspace limit")
             if ur_pose[0] > -0.3:
                 vel[0] = min(vel[0], 0.)
+                print("hit workspace limit")
             if ur_pose[2] < .08:
                 vel[2] = 0.
-            if ur_pose[1] > .34:
+                print("hit workspace limit")
+            if ur_pose[1] > .45:
                 print("end of workspace")
-                print("log saved: ", logger.save_logs())
+                # print("log saved: ", logger.save_logs())
                 gs.pc.inContact = False
                 vel[0] = min(vel[0], 0.)
                 vel[1] = 0.
 
-            vel = np.array(vel)
+            # vel = np.array(vel)
             urc.speedl(vel, a=a, t=dt*2)
             print(vel)
 
