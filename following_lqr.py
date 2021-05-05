@@ -166,9 +166,8 @@ def test_combined():
 
                 # K = np.array([-778.8, 1.8188, 4.656]) # linear regression Q = 1, 1, 0.1
                 # K = np.array([-775.1, 1.7560, 4.644]) # linear regression Q = 1, 0.8, 0.1
-                # K = np.array([-769.4, 1.659, 4.626]) # linear regression Q = 1, 0.8, 0.1
-                K = np.array([-180.57, 10.44, 1.758]) # GP linearized at origin Q = 1, 0.8, 0.1, 200 inducing
-                # K = np.array([-923.3, 22.1, -19.65]) # GP regression linearized about origin
+                K = np.array([-769.4, 1.659, 4.626]) # linear regression Q = 1, 0.8, 0.1
+                # K = np.array([-180.57, 10.44, 1.758]) # GP linearized at origin Q = 1, 0.8, 0.1, 200 inducing
                 state = np.array([[cable_xy[0]*pixel_size], [theta], [alpha]])
                 phi = -K.dot(state)
                 target_ur_dir = phi + alpha

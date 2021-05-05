@@ -34,32 +34,32 @@ idx = list(range(N))
 random.seed(0)
 random.shuffle(idx)
 
-train_idx = idx[:int(N * 0.8)]
-test_idx = idx[int(N * 0.8):]
+train_idx = idx[:int(N * 0.2)]
+test_idx = idx[int(N * 0.2):]
 
 X_train, Y_train = X[train_idx], Y[train_idx]
 
 kernel1 = GPy.kern.Matern32(input_dim=4,ARD=True,initialize=False)
-m1 = GPy.models.SparseGPRegression(X_train, Y_train[:, 0].reshape(Y_train.shape[0], 1), kernel1, num_inducing=1000, initialize=False)
+m1 = GPy.models.SparseGPRegression(X_train, Y_train[:, 0].reshape(Y_train.shape[0], 1), kernel1, num_inducing=200, initialize=False)
 m1.update_model(False)
 m1.initialize_parameter()
-m1[:] = np.load('./controller/GP/m1_m32_a_sparse_1000i_20.npy')
+m1[:] = np.load('./controller/GP/m1_m32_a_200i_20.npy')
 m1.update_model(True)
 # m.initialize_parameter()
 # mu,var = m.predict(X_test)
 
 kernel2 = GPy.kern.Exponential(input_dim=4, ARD=True, initialize=False)
-m2 = GPy.models.SparseGPRegression(X_train, Y_train[:, 1].reshape(Y_train.shape[0], 1), kernel2, num_inducing=1000, initialize=False)
+m2 = GPy.models.SparseGPRegression(X_train, Y_train[:, 1].reshape(Y_train.shape[0], 1), kernel2, num_inducing=200, initialize=False)
 m2.update_model(False)
 m2.initialize_parameter()
-m2[:] = np.load('./controller/GP/m2_exp_a_sparse_1000i_20.npy')
+m2[:] = np.load('./controller/GP/m2_exp_a_200i_20.npy')
 m2.update_model(True)
 
-kernel3 = GPy.kern.Matern52(input_dim=4, ARD=True, initialize=False)
-m3 = GPy.models.SparseGPRegression(X_train, Y_train[:, 2].reshape(Y_train.shape[0], 1), kernel3, num_inducing=1000, initialize=False)
+kernel3 = GPy.kern.Exponential(input_dim=4, ARD=True, initialize=False)
+m3 = GPy.models.SparseGPRegression(X_train, Y_train[:, 2].reshape(Y_train.shape[0], 1), kernel3, num_inducing=200, initialize=False)
 m3.update_model(False)
 m3.initialize_parameter()
-m3[:] = np.load('./controller/GP/m3_exp_a_sparse_1000i_20.npy')
+m3[:] = np.load('./controller/GP/m3_exp_a_200i_20.npy')
 m3.update_model(True)
 
 def tv_linA(x):
@@ -67,7 +67,7 @@ def tv_linA(x):
     model = [m1, m2, m3]
     A = np.zeros((m, m))
     for i in range(m):
-        grad = model[i].predictive_gradients(np.array(x).T)
+        grad = model[i].predictive_gradients(np.array([x]))
         for j in range(m):
             A[i][j] = grad[0][0][j]
     return A
@@ -77,10 +77,24 @@ def tv_linB(x):
     model = [m1, m2, m3]
     B = np.zeros((m, 1))
     for i in range(m):
-        grad = model[i].predictive_gradients(np.array(x).T)
+        grad = model[i].predictive_gradients(np.array([x]))
         B[i, 0] = grad[0][0][3]
     return B
+#
 
+
+# Q = np.array([[1.0, 0.0, 0.0], [0.0, 0.8, 0.0], [0.0, 0.0, 0.1]])
+# R = [[0.1]]
+# A = tv_linA([0, 0, 0, 0])
+# B = tv_linB([0, 0, 0, 0])
+# print("A")
+# print(A)
+# print("B")
+# print(B)
+# K,S,E = ctrl.lqr(A, B, Q, R)
+# print("K")
+# print(K)
+#
 urc = UR_Controller()
 grc = Gripper_Controller()
 
@@ -170,7 +184,7 @@ def test_combined():
     depth_queue = []
 
     cnt = 0
-    dt = 0.05
+    dt = 0.08
 
     tm_key = time.time()
     logger = Logger()
@@ -229,13 +243,17 @@ def test_combined():
                 # K = np.array([-923.3, 22.1, -19.65]) # GP regression linearized about origin
 
                 state = np.array([[cable_xy[0]*pixel_size], [theta], [alpha]])
-                Q = np.array([[1.0, 0.0, 0.0], [0.5, 0.0, 0.0], [0.0, 0.0, 0.1]])
+                Q = np.array([[1.0, 0.0, 0.0], [0.0, 0.8, 0.0], [0.0, 0.0, 0.1]])
                 R = [[0.1]]
-                x0 = np.zeros((4, 1))
-                x0[0], x0[1], x0[2] = state[0], state[1], state[2]
+                x0 = np.zeros(4)
+                x0[0], x0[1], x0[2] = state[0, 0], state[1, 0], state[2, 0]
+                # print(x0)
                 A = tv_linA(x0)
                 B = tv_linB(x0)
+                # A = tv_linA([0, 0, 0, 0])
+                # B = tv_linB([0, 0, 0, 0])
                 K,S,E = ctrl.lqr(A, B, Q, R)
+                print("B: ", B)
 
                 phi = -K.dot(state)
                 target_ur_dir = phi + alpha
@@ -243,12 +261,12 @@ def test_combined():
                 print("TARGET UR DIR", target_ur_dir/pi*180)
                 limit_phi = pi / 3
                 target_ur_dir = max(-limit_phi, min(target_ur_dir, limit_phi))
-                v_norm = 0.03
+                v_norm = 0.02
                 vel = np.array([v_norm * sin(target_ur_dir), v_norm * cos(target_ur_dir), 0, 0, 0, 0])
 
             else:
                 # gs.pc.inContact = False
-                print("no pose estimate")
+                # print("no pose estimate")
                 # print("log saved: ", logger.save_logs())
                 continue
 
@@ -273,7 +291,7 @@ def test_combined():
                 vel[0] = min(vel[0], 0.)
             if ur_pose[2] < .08:
                 vel[2] = 0.
-            if ur_pose[1] > .34:
+            if ur_pose[1] > .45:
                 print("end of workspace")
                 # print("log saved: ", logger.save_logs())
                 gs.pc.inContact = False
@@ -284,7 +302,7 @@ def test_combined():
             urc.speedl(vel, a=a, t=dt*2)
             print(vel)
 
-            time.sleep(dt)
+            time.sleep(dt*0.5)
             # cnt += 1
 
         c = cv2.waitKey(1) & 0xFF

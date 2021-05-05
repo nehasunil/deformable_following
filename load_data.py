@@ -27,7 +27,7 @@ def draw(logs):
         t_diff = log['dt']
 
         thetas.append(theta)
-        ur_xy.append([ur_pose[0], ur_pose[1]]) 
+        ur_xy.append([ur_pose[0], ur_pose[1]])
         cable_xy.append(cable_center)
         ur_v.append([ur_velocity[0], ur_velocity[1]])
         dt.append(t_diff)
@@ -48,24 +48,24 @@ def remove_end(x):
     return x[1:-1]
 
 def parse(logs):
-    # pixel_size = 0.2e-3 
+    # pixel_size = 0.2e-3
     # pixel_size = 0.1e-3 # caliper + gelsight examples
     pixel_size = 0.2e-3
-    ur_xy, cable_y, thetas, ur_v, dt = draw(logs)
+    ur_xy, cable_xy, thetas, ur_v, dt = draw(logs)
 
-    pose0 = np.array([-0.556, -0.227, 0.092])
-    fixpoint_x = pose0[0] + 0.0178 # - 15e-3
-    fixpoint_y = pose0[1] - 0.0382 # 0.2 measure distance between 2 grippers at pose0
-    cable_xy = np.array(cable_y)
+    pose0 = np.array([-0.539, -0.226, 0.092])
+    fixpoint_x = pose0[0] + 0.006 # - 15e-3
+    fixpoint_y = pose0[1] - 0.039 # 0.2 measure distance between 2 grippers at pose0
+    cable_xy = np.array(cable_xy)
     # cable_xy = np.zeros((len(cable_y), 2))
     # for y in range(len(cable_y)):
     #     cable_xy[y,1] = cable_y[y]
     # cable_xy[:,1] *= -1
-    cable_real_xy = np.array(ur_xy) + np.array([0., -0.0365]) + cable_xy*pixel_size
-    alpha = np.arctan((cable_real_xy[:,1] - fixpoint_y)/(cable_real_xy[:,0] - fixpoint_x))
+    cable_real_xy = np.array(ur_xy) + np.array([0., -0.039]) + cable_xy*pixel_size
+    alpha = np.arctan((cable_real_xy[:,0] - fixpoint_x)/(cable_real_xy[:,1] - fixpoint_y))
 
     ur_v = np.asarray(ur_v)
-    beta = np.arcsin((ur_v[:,1])/((ur_v[:,0]**2+ur_v[:,1]**2)**0.5)) # use test case to check signs
+    beta = np.arcsin((ur_v[:,0])/((ur_v[:,0]**2+ur_v[:,1]**2)**0.5)) # use test case to check signs
 
     # print("UR_V", ur_v[:,:2], "BETA", beta)
 
@@ -122,7 +122,7 @@ def parse(logs):
 def loadall():
     X, Y = np.empty((0,4), np.float32), np.empty((0,3), np.float32)
     # for filename in glob.glob('logs/1908290930/*.p'):
-    for filename in glob.glob('data/logs/20210430/*.p'):
+    for filename in glob.glob('data/logs/20210503/*.p'):
         logs = read_logs(filename)
         try:
             x, y = parse(logs)
@@ -136,4 +136,3 @@ def loadall():
 
 if __name__ == "__main__":
     loadall()
-
