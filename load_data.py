@@ -35,21 +35,12 @@ def draw(logs):
         x.append(ur_pose[0])
         y.append(ur_pose[1])
 
-    # plt.plot(x, y, 'x')
-    # plt.plot(thetas)
-    # plt.figure()
-    # plt.plot(x, y, 'x')
-    # plt.figure()
-    # plt.plot(thetas)
-    # plt.show()
     return ur_xy, cable_xy, thetas, ur_v, dt
 
 def remove_end(x):
     return x[1:-1]
 
 def parse(logs):
-    # pixel_size = 0.2e-3
-    # pixel_size = 0.1e-3 # caliper + gelsight examples
     pixel_size = 0.2e-3
     ur_xy, cable_xy, thetas, ur_v, dt = draw(logs)
 

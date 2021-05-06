@@ -25,10 +25,8 @@ from load_data import loadall
 from typing import Tuple
 import torch
 from torch import Tensor
-
-import sys
-from casadi import *
-import do_mpc
+from constrained_cem_mpc import ConstrainedCemMpc, ActionConstraint, box2torchpoly, TerminalConstraint, StateConstraint, \
+    DynamicsFunc
 
 urc = UR_Controller()
 grc = Gripper_Controller()
@@ -69,47 +67,23 @@ m3.initialize_parameter()
 m3[:] = np.load('./controller/GP/m3_exp_a_1000i_50.npy')
 m3.update_model(True)
 
-model_type = 'discrete' # either 'discrete' or 'continuous'
-model = do_mpc.model.Model(model_type)
+class Dynamics(DynamicsFunc):
+    """
+    From GP Dynamics model
+    """
 
-state_x = model.set_variable('_x',  'x')
-state_theta = model.set_variable('_x',  'theta')
-state_alpha = model.set_variable('_x',  'alpha')
-u = model.set_variable('_u',  'phi')
+    def __call__(self, states: Tensor, actions: Tensor) -> Tuple[Tensor, Tensor]:
+        dt = .05
+        x = states
+        x_np = states.numpy()
+        n = x_np.shape[0]
+        x_in = np.array([x_np[:, 0].reshape(n,), x_np[:,1].reshape(n,), x_np[:, 2].reshape(n,), actions.numpy().reshape(n,)]).T
+        xdot =  torch.tensor(np.array([m1.predict(x_in)[0], m2.predict(x_in)[0], m3.predict(x_in)[0]]).T.reshape(n, 3))
+        newx = x + xdot * dt
 
-# dx = model.set_variable('_z',  'dx')
-# dtheta = model.set_variable('_z',  'dtheta')
-# dalpha = model.set_variable('_z',  'dalpha')
-n = state_x.shape[0]
-x_in = np.array([state_x.reshape(n,), state_theta.reshape(n,), state_alpha.reshape(n,), u.reshape(n,)]).T
+        objective_cost = torch.zeros_like(x[:, 0])
 
-dx = m1.predict(x_in)[0]
-dtheta = m2.predict(x_in)[0]
-dalpha = m3.predict(x_in)[0]
-
-model.set_rhs('x',  dx)
-model.set_rhs('theta',  dtheta)
-model.set_rhs('alpha',  dalpha)
-
-model.setup()
-
-mpc = do_mpc.controller.MPC(model)
-setup_mpc = {
-    'n_horizon': 100,
-    'n_robust': 0,
-    'open_loop': 0,
-    't_step': 0.04,
-    'state_discretization': 'collocation',
-    'collocation_type': 'radau',
-    'collocation_deg': 3,
-    'collocation_ni': 1,
-    'store_full_solution': True,
-    # Use MA27 linear solver in ipopt for faster calculations:
-    'nlpsol_opts': {'ipopt.linear_solver': 'mumps'}
-}
-mpc.set_param(**setup_mpc)
-mpc.bounds['lower','_u','phi'] = -pi/3
-mpc.bounds['upper','_u','phi'] = pi/3
+        return newx, objective_cost
 
 
 urc.start()
@@ -211,10 +185,12 @@ def test_combined():
     vel = [0.00, 0.008, 0, 0, 0, 0]
 
     torch.set_default_dtype(torch.double)
-    constraints = [ActionConstraint(box2torchpoly([[-pi / 3, pi / 3]])), TerminalConstraint(box2torchpoly([[-0.002, 0.002], [-pi/5, pi/5], [-pi/4, pi/4]])),  #
+    # constraints = [ActionConstraint(box2torchpoly([[-pi / 3, pi / 3]])), TerminalConstraint(box2torchpoly([[-0.002, 0.002], [-pi/5, pi/5], [-pi/4, pi/4]])),  #
+    #    StateConstraint(box2torchpoly([[-0.02, 0.015], [-pi / 2, pi / 2], [-pi / 2, pi/2]]))]
+    constraints = [ActionConstraint(box2torchpoly([[-pi / 3, pi / 3]])), TerminalConstraint(box2torchpoly([[-0.0025, 0.0025], [-pi/4, pi/4], [-pi/4, pi/4]])),  #
        StateConstraint(box2torchpoly([[-0.02, 0.015], [-pi / 2, pi / 2], [-pi / 2, pi/2]]))]
     mpc = ConstrainedCemMpc(dynamics_func=Dynamics(), constraints=constraints, state_dimen=3, action_dimen=1,
-                time_horizon=20, num_rollouts=100, num_elites=10, num_iterations=10)
+                time_horizon=30, num_rollouts=100, num_elites=10, num_iterations=10)
 # -0.017, 0.01
     while True:
         img = gs.stream.image

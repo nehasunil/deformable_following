@@ -34,32 +34,32 @@ idx = list(range(N))
 random.seed(0)
 random.shuffle(idx)
 
-train_idx = idx[:int(N * 0.2)]
-test_idx = idx[int(N * 0.2):]
+train_idx = idx[:int(N * 0.5)]
+test_idx = idx[int(N * 0.5):]
 
 X_train, Y_train = X[train_idx], Y[train_idx]
 
 kernel1 = GPy.kern.Matern32(input_dim=4,ARD=True,initialize=False)
-m1 = GPy.models.SparseGPRegression(X_train, Y_train[:, 0].reshape(Y_train.shape[0], 1), kernel1, num_inducing=200, initialize=False)
+m1 = GPy.models.SparseGPRegression(X_train, Y_train[:, 0].reshape(Y_train.shape[0], 1), kernel1, num_inducing=1000, initialize=False)
 m1.update_model(False)
 m1.initialize_parameter()
-m1[:] = np.load('./controller/GP/m1_m32_a_200i_20.npy')
+m1[:] = np.load('./controller/GP/m1_m32_a_1000i_50.npy')
 m1.update_model(True)
 # m.initialize_parameter()
 # mu,var = m.predict(X_test)
 
 kernel2 = GPy.kern.Exponential(input_dim=4, ARD=True, initialize=False)
-m2 = GPy.models.SparseGPRegression(X_train, Y_train[:, 1].reshape(Y_train.shape[0], 1), kernel2, num_inducing=200, initialize=False)
+m2 = GPy.models.SparseGPRegression(X_train, Y_train[:, 1].reshape(Y_train.shape[0], 1), kernel2, num_inducing=1000, initialize=False)
 m2.update_model(False)
 m2.initialize_parameter()
-m2[:] = np.load('./controller/GP/m2_exp_a_200i_20.npy')
+m2[:] = np.load('./controller/GP/m2_exp_a_1000i_50.npy')
 m2.update_model(True)
 
 kernel3 = GPy.kern.Exponential(input_dim=4, ARD=True, initialize=False)
-m3 = GPy.models.SparseGPRegression(X_train, Y_train[:, 2].reshape(Y_train.shape[0], 1), kernel3, num_inducing=200, initialize=False)
+m3 = GPy.models.SparseGPRegression(X_train, Y_train[:, 2].reshape(Y_train.shape[0], 1), kernel3, num_inducing=1000, initialize=False)
 m3.update_model(False)
 m3.initialize_parameter()
-m3[:] = np.load('./controller/GP/m3_exp_a_200i_20.npy')
+m3[:] = np.load('./controller/GP/m3_exp_a_1000i_50.npy')
 m3.update_model(True)
 
 def tv_linA(x):
@@ -80,7 +80,9 @@ def tv_linB(x):
         grad = model[i].predictive_gradients(np.array([x]))
         B[i, 0] = grad[0][0][3]
     return B
-#
+
+# print(m1.predict(np.asarray[]))
+
 
 
 # Q = np.array([[1.0, 0.0, 0.0], [0.0, 0.8, 0.0], [0.0, 0.0, 0.1]])
@@ -243,7 +245,7 @@ def test_combined():
                 # K = np.array([-923.3, 22.1, -19.65]) # GP regression linearized about origin
 
                 state = np.array([[cable_xy[0]*pixel_size], [theta], [alpha]])
-                Q = np.array([[1.0, 0.0, 0.0], [0.0, 0.8, 0.0], [0.0, 0.0, 0.1]])
+                Q = np.array([[1.0, 0.0, 0.0], [0.0, 0.7, 0.0], [0.0, 0.0, 0.1]])
                 R = [[0.1]]
                 x0 = np.zeros(4)
                 x0[0], x0[1], x0[2] = state[0, 0], state[1, 0], state[2, 0]
@@ -265,8 +267,9 @@ def test_combined():
                 vel = np.array([v_norm * sin(target_ur_dir), v_norm * cos(target_ur_dir), 0, 0, 0, 0])
 
             else:
-                # gs.pc.inContact = False
-                # print("no pose estimate")
+                gs.pc.inContact = False
+                print("no pose estimate")
+                print("distance followed: ", ((cable_real_xy[0] - fixpoint_x)**2 + (cable_real_xy[1] - fixpoint_y)**2)**0.5)
                 # print("log saved: ", logger.save_logs())
                 continue
 

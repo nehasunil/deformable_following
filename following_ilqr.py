@@ -14,24 +14,19 @@ from controller.gripper.gripper_control import Gripper_Controller
 from controller.ur5.ur_controller import UR_Controller
 from controller.mini_robot_arm.RX150_driver import RX150_Driver
 
+import GPy
+from load_data import loadall
+import control as ctrl
+import slycot
+
 import keyboard
 from queue import Queue
 from logger_class import Logger
 
+from ilqr import iLQR
+
 import collections
 
-import GPy
-from load_data import loadall
-from typing import Tuple
-import torch
-from torch import Tensor
-
-import sys
-from casadi import *
-import do_mpc
-
-urc = UR_Controller()
-grc = Gripper_Controller()
 
 X, Y = loadall()
 
@@ -69,48 +64,75 @@ m3.initialize_parameter()
 m3[:] = np.load('./controller/GP/m3_exp_a_1000i_50.npy')
 m3.update_model(True)
 
-model_type = 'discrete' # either 'discrete' or 'continuous'
-model = do_mpc.model.Model(model_type)
+def tv_linA(x):
+    m = 3
+    model = [m1, m2, m3]
+    A = np.zeros((m, m))
+    for i in range(m):
+        grad = model[i].predictive_gradients(np.array([x]))
+        for j in range(m):
+            A[i][j] = grad[0][0][j]
+    return A
 
-state_x = model.set_variable('_x',  'x')
-state_theta = model.set_variable('_x',  'theta')
-state_alpha = model.set_variable('_x',  'alpha')
-u = model.set_variable('_u',  'phi')
+def tv_linB(x):
+    m = 3
+    model = [m1, m2, m3]
+    B = np.zeros((m, 1))
+    for i in range(m):
+        grad = model[i].predictive_gradients(np.array([x]))
+        B[i, 0] = grad[0][0][3]
+    return B
 
-# dx = model.set_variable('_z',  'dx')
-# dtheta = model.set_variable('_z',  'dtheta')
-# dalpha = model.set_variable('_z',  'dalpha')
-n = state_x.shape[0]
-x_in = np.array([state_x.reshape(n,), state_theta.reshape(n,), state_alpha.reshape(n,), u.reshape(n,)]).T
+# print(m1.predict(np.asarray[]))
 
-dx = m1.predict(x_in)[0]
-dtheta = m2.predict(x_in)[0]
-dalpha = m3.predict(x_in)[0]
+class CableDynamics(iLQR.dynamics.Dynamics):
+    """
+    From GP Dynamics model
+    """
+    def __init__(self, dt):
+        self.dt = dt
 
-model.set_rhs('x',  dx)
-model.set_rhs('theta',  dtheta)
-model.set_rhs('alpha',  dalpha)
+    def f(x, u, i):
+        """Dynamics model.
+            Args:
+                x: Current state [state_size].
+                u: Current control [action_size].
+                i: Current time step.
+            Returns:
+                Next state [state_size].
+        """
+        x0 = np.zeros(4)
+        x0[0], x0[1], x0[2], x0[3] = x[0, 0], x[1, 0], x[2, 0], u
+        dx = np.array([m1.predict(np.array([x0]))[0], m2.predict(np.array([x0]))[0], m3.predict(np.array([x0]))[0]]).T.reshape(, 3))
 
-model.setup()
+    # def __call__(self, states: Tensor, actions: Tensor) -> Tuple[Tensor, Tensor]:
+    #     dt = .05
+    #     x = states
+    #     x_np = states.numpy()
+    #     n = x_np.shape[0]
+    #     x_in = np.array([x_np[:, 0].reshape(n,), x_np[:,1].reshape(n,), x_np[:, 2].reshape(n,), actions.numpy().reshape(n,)]).T
+    #     xdot =  torch.tensor(np.array([m1.predict(x_in)[0], m2.predict(x_in)[0], m3.predict(x_in)[0]]).T.reshape(n, 3))
+    #     newx = x + xdot * dt
+    #
+    #     objective_cost = torch.zeros_like(x[:, 0])
+    #
+    #     return newx, objective_cost
 
-mpc = do_mpc.controller.MPC(model)
-setup_mpc = {
-    'n_horizon': 100,
-    'n_robust': 0,
-    'open_loop': 0,
-    't_step': 0.04,
-    'state_discretization': 'collocation',
-    'collocation_type': 'radau',
-    'collocation_deg': 3,
-    'collocation_ni': 1,
-    'store_full_solution': True,
-    # Use MA27 linear solver in ipopt for faster calculations:
-    'nlpsol_opts': {'ipopt.linear_solver': 'mumps'}
-}
-mpc.set_param(**setup_mpc)
-mpc.bounds['lower','_u','phi'] = -pi/3
-mpc.bounds['upper','_u','phi'] = pi/3
 
+# Q = np.array([[1.0, 0.0, 0.0], [0.0, 0.8, 0.0], [0.0, 0.0, 0.1]])
+# R = [[0.1]]
+# A = tv_linA([0, 0, 0, 0])
+# B = tv_linB([0, 0, 0, 0])
+# print("A")
+# print(A)
+# print("B")
+# print(B)
+# K,S,E = ctrl.lqr(A, B, Q, R)
+# print("K")
+# print(K)
+#
+urc = UR_Controller()
+grc = Gripper_Controller()
 
 urc.start()
 grc.start()
@@ -149,7 +171,6 @@ tracking_setting = (10, 14, 5, 16, 41, 27, 27)
 
 n, m = 150, 200
 # Vis3D = ClassVis3D(m, n)
-
 
 
 def read_csv(filename=f"config_{sensor_id}.csv"):
@@ -199,7 +220,7 @@ def test_combined():
     depth_queue = []
 
     cnt = 0
-    dt = 0.05
+    dt = 0.08
 
     tm_key = time.time()
     logger = Logger()
@@ -210,12 +231,6 @@ def test_combined():
 
     vel = [0.00, 0.008, 0, 0, 0, 0]
 
-    torch.set_default_dtype(torch.double)
-    constraints = [ActionConstraint(box2torchpoly([[-pi / 3, pi / 3]])), TerminalConstraint(box2torchpoly([[-0.002, 0.002], [-pi/5, pi/5], [-pi/4, pi/4]])),  #
-       StateConstraint(box2torchpoly([[-0.02, 0.015], [-pi / 2, pi / 2], [-pi / 2, pi/2]]))]
-    mpc = ConstrainedCemMpc(dynamics_func=Dynamics(), constraints=constraints, state_dimen=3, action_dimen=1,
-                time_horizon=20, num_rollouts=100, num_elites=10, num_iterations=10)
-# -0.017, 0.01
     while True:
         img = gs.stream.image
 
@@ -262,34 +277,34 @@ def test_combined():
 
                 # K = np.array([-372.25, 8.62, -1.984]) # linear regression
                 # K = np.array([-923.3, 22.1, -19.65]) # GP regression linearized about origin
-                # state = np.array([[cable_xy[0]*pixel_size], [theta], [alpha]])
-                state = torch.tensor([cable_xy[0]*pixel_size, theta, alpha], dtype=torch.double)
-                actions, _ = mpc.get_actions(state)
 
-                # Sometimes the optimisation process may fail to find a safe action sequence, in which case we do nothing.
-                if actions is None:
-                    phi = torch.tensor([0])
-                    print('taking default action: ', phi*180/pi)
-                else:
-                    phi = actions[0].numpy()
-                    print('taking mpc action: ', phi*180/pi)
+                state = np.array([[cable_xy[0]*pixel_size], [theta], [alpha]])
+                Q = np.array([[1.0, 0.0, 0.0], [0.0, 0.7, 0.0], [0.0, 0.0, 0.1]])
+                R = [[0.1]]
+                x0 = np.zeros(4)
+                x0[0], x0[1], x0[2] = state[0, 0], state[1, 0], state[2, 0]
+                # print(x0)
+                A = tv_linA(x0)
+                B = tv_linB(x0)
+                # A = tv_linA([0, 0, 0, 0])
+                # B = tv_linB([0, 0, 0, 0])
+                K,S,E = ctrl.lqr(A, B, Q, R)
+                print("B: ", B)
 
-                # phi = -K.dot(state)
+                phi = -K.dot(state)
                 target_ur_dir = phi + alpha
                 print("STATE", state)
                 print("TARGET UR DIR", target_ur_dir/pi*180)
                 limit_phi = pi / 3
                 target_ur_dir = max(-limit_phi, min(target_ur_dir, limit_phi))
-                v_norm = 0.01
+                v_norm = 0.02
                 vel = np.array([v_norm * sin(target_ur_dir), v_norm * cos(target_ur_dir), 0, 0, 0, 0])
-                # if grc.follow_gripper_pos > 0.965:
-                #     grc.follow_gripper_pos -= 0.001
 
             else:
                 gs.pc.inContact = False
                 print("no pose estimate")
-                # grc.follow_gripper_pos += 0.002
-                print("log saved: ", logger.save_logs())
+                print("distance followed: ", ((cable_real_xy[0] - fixpoint_x)**2 + (cable_real_xy[1] - fixpoint_y)**2)**0.5)
+                # print("log saved: ", logger.save_logs())
                 continue
 
             a = 0.02
@@ -313,9 +328,9 @@ def test_combined():
                 vel[0] = min(vel[0], 0.)
             if ur_pose[2] < .08:
                 vel[2] = 0.
-            if ur_pose[1] > .34:
+            if ur_pose[1] > .45:
                 print("end of workspace")
-                print("log saved: ", logger.save_logs())
+                # print("log saved: ", logger.save_logs())
                 gs.pc.inContact = False
                 vel[0] = min(vel[0], 0.)
                 vel[1] = 0.
@@ -324,7 +339,7 @@ def test_combined():
             urc.speedl(vel, a=a, t=dt*2)
             print(vel)
 
-            time.sleep(dt)
+            time.sleep(dt*0.5)
             # cnt += 1
 
         c = cv2.waitKey(1) & 0xFF

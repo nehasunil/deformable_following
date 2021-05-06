@@ -166,8 +166,9 @@ def test_combined():
 
                 # K = np.array([-778.8, 1.8188, 4.656]) # linear regression Q = 1, 1, 0.1
                 # K = np.array([-775.1, 1.7560, 4.644]) # linear regression Q = 1, 0.8, 0.1
-                K = np.array([-769.4, 1.659, 4.626]) # linear regression Q = 1, 0.8, 0.1
+                # K = np.array([-769.4, 1.659, 4.626]) # linear regression Q = 1, 0.8, 0.1
                 # K = np.array([-180.57, 10.44, 1.758]) # GP linearized at origin Q = 1, 0.8, 0.1, 200 inducing
+                K = np.array([-7.946, -0.0625, 0.3853])
                 state = np.array([[cable_xy[0]*pixel_size], [theta], [alpha]])
                 phi = -K.dot(state)
                 target_ur_dir = phi + alpha
@@ -181,8 +182,9 @@ def test_combined():
                 #     grc.follow_gripper_pos -= 0.001
 
             else:
-                # gs.pc.inContact = False
+                gs.pc.inContact = False
                 print("no pose estimate")
+                print("distance followed: ", ((cable_real_xy[0] - fixpoint_x)**2 + (cable_real_xy[1] - fixpoint_y)**2)**0.5)
                 # grc.follow_gripper_pos += 0.002
                 # print("log saved: ", logger.save_logs())
                 continue
