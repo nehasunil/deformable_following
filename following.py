@@ -157,9 +157,9 @@ def test_combined():
                 print("xy: ", xy, "theta: ", theta *180/np.pi)
 
             else:
-                # gs.pc.inContact = False
+                gs.pc.inContact = False
                 print("no pose estimate")
-                # print("log saved: ", logger.save_logs())
+                print("log saved: ", logger.save_logs())
                 continue
 
             a = 0.02
@@ -182,7 +182,7 @@ def test_combined():
                 vel[2] = 0.
             if ur_pose[1] > .34:
                 print("end of workspace")
-                # print("log saved: ", logger.save_logs())
+                print("log saved: ", logger.save_logs())
                 gs.pc.inContact = False
                 vel[0] = min(vel[0], 0.)
                 vel[1] = 0.

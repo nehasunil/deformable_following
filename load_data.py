@@ -35,21 +35,12 @@ def draw(logs):
         x.append(ur_pose[0])
         y.append(ur_pose[1])
 
-    # plt.plot(x, y, 'x')
-    # plt.plot(thetas)
-    # plt.figure()
-    # plt.plot(x, y, 'x')
-    # plt.figure()
-    # plt.plot(thetas)
-    # plt.show()
     return ur_xy, cable_xy, thetas, ur_v, dt
 
 def remove_end(x):
     return x[1:-1]
 
 def parse(logs):
-    # pixel_size = 0.2e-3
-    # pixel_size = 0.1e-3 # caliper + gelsight examples
     pixel_size = 0.2e-3
     ur_xy, cable_xy, thetas, ur_v, dt = draw(logs)
 
@@ -122,7 +113,15 @@ def parse(logs):
 def loadall():
     X, Y = np.empty((0,4), np.float32), np.empty((0,3), np.float32)
     # for filename in glob.glob('logs/1908290930/*.p'):
-    for filename in glob.glob('data/logs/20210503/*.p'):
+    # for filename in glob.glob('data/logs/20210503/*.p'):
+    #     logs = read_logs(filename)
+    #     try:
+    #         x, y = parse(logs)
+    #         X = np.vstack([X, x])
+    #         Y = np.vstack([Y, y])
+    #     except:
+    #         print(filename)
+    for filename in glob.glob('data/logs/20210520/*.p'):
         logs = read_logs(filename)
         try:
             x, y = parse(logs)
@@ -130,7 +129,6 @@ def loadall():
             Y = np.vstack([Y, y])
         except:
             print(filename)
-        # break
     print(X.shape, Y.shape)
     return X, Y
 

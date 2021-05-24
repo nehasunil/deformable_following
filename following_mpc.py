@@ -39,33 +39,52 @@ idx = list(range(N))
 random.seed(0)
 random.shuffle(idx)
 
-train_idx = idx[:int(N * 0.2)]
-test_idx = idx[int(N * 0.2):]
+train_idx = idx[:int(N * 0.5)]
+test_idx = idx[int(N * 0.5):]
 
 X_train, Y_train = X[train_idx], Y[train_idx]
 
 kernel1 = GPy.kern.Matern32(input_dim=4,ARD=True,initialize=False)
-m1 = GPy.models.SparseGPRegression(X_train, Y_train[:, 0].reshape(Y_train.shape[0], 1), kernel1, num_inducing=200, initialize=False)
+m1 = GPy.models.SparseGPRegression(X_train, Y_train[:, 0].reshape(Y_train.shape[0], 1), kernel1, num_inducing=1000, initialize=False)
 m1.update_model(False)
 m1.initialize_parameter()
-m1[:] = np.load('./controller/GP/m1_m32_a_200i_20.npy')
+m1[:] = np.load('./controller/GP/m1_m32_a_1000i_50.npy')
 m1.update_model(True)
 # m.initialize_parameter()
 # mu,var = m.predict(X_test)
 
 kernel2 = GPy.kern.Exponential(input_dim=4, ARD=True, initialize=False)
-m2 = GPy.models.SparseGPRegression(X_train, Y_train[:, 1].reshape(Y_train.shape[0], 1), kernel2, num_inducing=200, initialize=False)
+m2 = GPy.models.SparseGPRegression(X_train, Y_train[:, 1].reshape(Y_train.shape[0], 1), kernel2, num_inducing=1000, initialize=False)
 m2.update_model(False)
 m2.initialize_parameter()
-m2[:] = np.load('./controller/GP/m2_exp_a_200i_20.npy')
+m2[:] = np.load('./controller/GP/m2_exp_a_1000i_50.npy')
 m2.update_model(True)
 
 kernel3 = GPy.kern.Exponential(input_dim=4, ARD=True, initialize=False)
-m3 = GPy.models.SparseGPRegression(X_train, Y_train[:, 2].reshape(Y_train.shape[0], 1), kernel3, num_inducing=200, initialize=False)
+m3 = GPy.models.SparseGPRegression(X_train, Y_train[:, 2].reshape(Y_train.shape[0], 1), kernel3, num_inducing=1000, initialize=False)
 m3.update_model(False)
 m3.initialize_parameter()
-m3[:] = np.load('./controller/GP/m3_exp_a_200i_20.npy')
+m3[:] = np.load('./controller/GP/m3_exp_a_1000i_50.npy')
 m3.update_model(True)
+
+def tv_linA(x):
+    m = 3
+    model = [m1, m2, m3]
+    A = np.zeros((m, m))
+    for i in range(m):
+        grad = model[i].predictive_gradients(np.array([x]))
+        for j in range(m):
+            A[i][j] = grad[0][0][j]
+    return A
+
+def tv_linB(x):
+    m = 3
+    model = [m1, m2, m3]
+    B = np.zeros((m, 1))
+    for i in range(m):
+        grad = model[i].predictive_gradients(np.array([x]))
+        B[i, 0] = grad[0][0][3]
+    return B
 
 class Dynamics(DynamicsFunc):
     """
@@ -73,15 +92,17 @@ class Dynamics(DynamicsFunc):
     """
 
     def __call__(self, states: Tensor, actions: Tensor) -> Tuple[Tensor, Tensor]:
-        dt = .05
+        dt = .05 *15
         x = states
         x_np = states.numpy()
         n = x_np.shape[0]
         x_in = np.array([x_np[:, 0].reshape(n,), x_np[:,1].reshape(n,), x_np[:, 2].reshape(n,), actions.numpy().reshape(n,)]).T
-        xdot =  torch.tensor(np.array([m1.predict(x_in)[0], m2.predict(x_in)[0], m3.predict(x_in)[0]]).T.reshape(n, 3))
+        xdot =  torch.tensor(np.array([m1.predict(x_in)[0], m2.predict(x_in)[0], m3.predict(x_in)[0]]).reshape(n, 3))
         newx = x + xdot * dt
 
-        objective_cost = torch.zeros_like(x[:, 0])
+        # objective_cost = torch.zeros_like(x[:, 0])
+        objective_cost = torch.tensor(np.array([1.0*(x_np[i,0]/.013)**2 + 0.7*(x_np[i,1]/(pi/3))**2 + 0.1*(x_np[i,2]/(pi/2))**2 + 0.1*(actions.numpy()[i]/(pi/3))**2 for i in range(n)]).reshape(n, ))
+
 
         return newx, objective_cost
 
@@ -98,7 +119,7 @@ pose_prep = np.array([-0.435, -0.187, 0.155, -1.609, -1.661, 0.995])
 grc.gripper_helper.set_gripper_current_limit(0.6)
 
 
-rx150 = RX150_Driver(port="/dev/ttyACM0", baudrate=1000000)
+rx150 = RX150_Driver(port="/dev/ttyACM1", baudrate=1000000)
 rx150.torque(enable=1)
 print(rx150.readpos())
 
@@ -185,11 +206,13 @@ def test_combined():
     vel = [0.00, 0.008, 0, 0, 0, 0]
 
     torch.set_default_dtype(torch.double)
-    constraints = [ActionConstraint(box2torchpoly([[-pi / 3, pi / 3]])), TerminalConstraint(box2torchpoly([[-0.0001, 0.0001], [-pi/12, pi/12], [-pi/6, pi/6]])),  #
-       StateConstraint(box2torchpoly([[-0.017, 0.01], [-pi / 3, pi / 3], [-pi / 2, pi/2]]))]
+    # constraints = [ActionConstraint(box2torchpoly([[-pi / 3, pi / 3]])), TerminalConstraint(box2torchpoly([[-0.002, 0.002], [-pi/5, pi/5], [-pi/4, pi/4]])),  #
+    #    StateConstraint(box2torchpoly([[-0.02, 0.015], [-pi / 2, pi / 2], [-pi / 2, pi/2]]))]
+    constraints = [ActionConstraint(box2torchpoly([[-pi / 3, pi / 3]])),   #
+       StateConstraint(box2torchpoly([[-0.014, 0.008], [-pi / 3, pi / 3], [-pi / 2, pi/2]]))]
     mpc = ConstrainedCemMpc(dynamics_func=Dynamics(), constraints=constraints, state_dimen=3, action_dimen=1,
-                time_horizon=10, num_rollouts=30, num_elites=10, num_iterations=4)
-
+                time_horizon=5, num_rollouts=30, num_elites=5, num_iterations=4)
+# -0.017, 0.01
     while True:
         img = gs.stream.image
 
@@ -234,7 +257,7 @@ def test_combined():
                 cable_real_xy = np.array(ur_xy) + np.array([0., -0.039]) + cable_xy*pixel_size
                 alpha = np.arctan((cable_real_xy[0] - fixpoint_x)/(cable_real_xy[1] - fixpoint_y))
 
-                # K = np.array([-372.25, 8.62, -1.984]) # linear regression
+                K = np.array([-372.25, 8.62, -1.984]) # linear regression
                 # K = np.array([-923.3, 22.1, -19.65]) # GP regression linearized about origin
                 # state = np.array([[cable_xy[0]*pixel_size], [theta], [alpha]])
                 state = torch.tensor([cable_xy[0]*pixel_size, theta, alpha], dtype=torch.double)
@@ -242,10 +265,11 @@ def test_combined():
 
                 # Sometimes the optimisation process may fail to find a safe action sequence, in which case we do nothing.
                 if actions is None:
-                    phi = torch.tensor([0])
+                    # phi = torch.tensor([0])
+                    phi = -K.dot(state)
                     print('taking default action: ', phi*180/pi)
                 else:
-                    phi = actions[0].numpy()
+                    phi = actions[0][0].numpy()
                     print('taking mpc action: ', phi*180/pi)
 
                 # phi = -K.dot(state)
@@ -254,20 +278,27 @@ def test_combined():
                 print("TARGET UR DIR", target_ur_dir/pi*180)
                 limit_phi = pi / 3
                 target_ur_dir = max(-limit_phi, min(target_ur_dir, limit_phi))
-                v_norm = 0.01
+                v_norm = 0.02
                 vel = np.array([v_norm * sin(target_ur_dir), v_norm * cos(target_ur_dir), 0, 0, 0, 0])
                 # if grc.follow_gripper_pos > 0.965:
                 #     grc.follow_gripper_pos -= 0.001
+                x_np = state.numpy()
+                x_in = np.array([[x_np[0], x_np[1], x_np[2], phi]])
+                # print("x: ", x_np.shape)
+                xdot =  np.array([m1.predict(x_in)[0], m2.predict(x_in)[0], m3.predict(x_in)[0]]).reshape(3, )
+                # print(xdot.shape)
+                newx = x_np + xdot * dt*12
+                print("PREDICTED STATE", newx)
 
             else:
                 gs.pc.inContact = False
                 print("no pose estimate")
+                print("distance followed: ", ((cable_real_xy[0] - fixpoint_x)**2 + (cable_real_xy[1] - fixpoint_y)**2)**0.5)
                 # grc.follow_gripper_pos += 0.002
-                print("log saved: ", logger.save_logs())
+                # print("log saved: ", logger.save_logs())
                 continue
 
             a = 0.02
-            v = 0.02
             kp = .0002
 
             # noise = random.random() * 0.03 - 0.015
@@ -289,16 +320,16 @@ def test_combined():
                 vel[2] = 0.
             if ur_pose[1] > .34:
                 print("end of workspace")
-                print("log saved: ", logger.save_logs())
+                # print("log saved: ", logger.save_logs())
                 gs.pc.inContact = False
                 vel[0] = min(vel[0], 0.)
                 vel[1] = 0.
 
             vel = np.array(vel)
-            urc.speedl(vel, a=a, t=dt*2)
+            urc.speedl(vel/2, a=a, t=dt*15)
             print(vel)
 
-            time.sleep(dt)
+            # time.sleep(dt)
             # cnt += 1
 
         c = cv2.waitKey(1) & 0xFF
