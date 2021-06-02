@@ -9,9 +9,9 @@ import csv
 from perception.wedge.gelsight.util.Vis3D import ClassVis3D
 
 from perception.wedge.gelsight.gelsight_driver import GelSight
-from control.gripper.gripper_control import Gripper_Controller
-from control.ur5.ur_controller import UR_Controller
-from control.mini_robot_arm.RX150_driver import RX150_Driver
+from controller.gripper.gripper_control import Gripper_Controller
+from controller.ur5.ur_controller import UR_Controller
+from controller.mini_robot_arm.RX150_driver import RX150_Driver
 
 import collections
 
@@ -23,7 +23,7 @@ grc.start()
 
 # pose0 = np.array([-0.51, 0.376, 0.409, -1.416, -1.480, -1.031])
 # pose0 = np.array([-0.539, 0.312, 0.29, -1.787, -1.604, -0.691])
-pose0 = np.array([-0.520, -0.219, 0.235, -1.129, -1.226, 1.326])
+pose0 = np.array([-0.505, -0.219, 0.235, -1.129, -1.226, 1.326])
 grc.gripper_helper.set_gripper_current_limit(0.6)
 
 
@@ -82,7 +82,7 @@ gs.start()
 def test_combined():
 
 
-    grc.follow_gripper_pos = 0.7
+    # grc.follow_gripper_pos = 0.8
     # grc.follow_gripper_pos = 1
     a = 0.15
     v = 0.08
@@ -90,7 +90,7 @@ def test_combined():
     rx_move(1200)
     c = input()
 
-    rx_move(830)
+    rx_move(810)
     grc.follow_gripper_pos = 1
     time.sleep(0.5)
 
@@ -169,7 +169,7 @@ def test_combined():
             print("sliding vel ", vel[0], "posx ", pos_x)
 
             vel = np.array(vel)
-            # urc.speedl(vel, a=a, t=dt*2)
+            urc.speedl(vel, a=a, t=dt*2)
 
             time.sleep(dt)
 

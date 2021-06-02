@@ -11,7 +11,7 @@ from gelsight.util.Vis3D import ClassVis3D
 from gelsight.gelsight_driver import GelSight
 
 # sensor_id = "W03"
-sensor_id = "Fabric0"
+sensor_id = "fabric_0"
 
 IP = "http://rpigelsightfabric.local"
 
@@ -77,6 +77,7 @@ def test_combined():
 
         cv2.imshow("pose", pose_img)
         cv2.imshow("marker", tracking_img)
+        cv2.imshow("mask", gs.tc.mask*1.0)
         cv2.imshow("diff", gs.tc.diff_raw / 255)
 
         c = cv2.waitKey(1) & 0xFF

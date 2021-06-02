@@ -52,17 +52,13 @@ class Tracking(Thread):
 
         # Subtract the surrounding pixels to magnify difference between markers and background
         diff = blur - frame_small.astype(np.float32)
-        
+
         diff *= 16.0
         diff[diff<0.] = 0.
         diff[diff>255.] = 255.
         diff = cv2.GaussianBlur(diff, (int(63/RESCALE), int(63/RESCALE)), 0)
 
-        if self.id == 'left':
-            mask = (diff[:,:,0] > 80) & (diff[:,:,2] > 80) & (diff[:,:,1] > 80)
-        else:
-            # Note: This is good for the right camera
-            mask = (diff[:,:,0] > 80) & (diff[:,:,2] > 80) & (diff[:,:,1] > 80)
+        mask = (diff[:,:,0] > 80) & (diff[:,:,2] > 80) & (diff[:,:,1] > 80)
 
         mask = cv2.resize(mask.astype(np.uint8), (frame.shape[1], frame.shape[0]))
         return mask
@@ -71,7 +67,7 @@ class Tracking(Thread):
     def marker_center(self, mask, frame, RESCALE=4):
 
         K = 8//RESCALE
-        
+
         areaThresh1=6*K**2
         areaThresh2=50*K**2
 
@@ -160,8 +156,8 @@ class Tracking(Thread):
             # print(time.time()-tm)
             tm = time.time()
 
-                            
-            # # Motor reaction based on the sliding information    
+
+            # # Motor reaction based on the sliding information
             self.slip_index_realtime = float(np.mean(((Cx-Ox)**2 + (Cy-Oy)**2) ** 0.5))
             # # slip_index.put(slip_index_realtime)
             # print("ArrowMean CurveRight:", self.slip_index_realtime, end =" ")
