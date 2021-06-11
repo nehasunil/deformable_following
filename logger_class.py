@@ -36,7 +36,7 @@ class Logger():
         self.last_log = None
 
         self.data_dir = './data/'
-        self.id = '20210602'
+        self.id = '20210611'
         self.img_dir = os.path.join(self.data_dir, 'imgs', self.id)
         self.log_dir = os.path.join(self.data_dir, 'logs', self.id)
         self.logs = []

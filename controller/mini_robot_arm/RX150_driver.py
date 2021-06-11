@@ -166,7 +166,7 @@ class RX150_Driver:
         # time.sleep(0.03)
 
 if __name__ == "__main__":
-    rx150 = RX150_Driver(port="/dev/ttyACM1", baudrate=1000000)
+    rx150 = RX150_Driver(port="/dev/ttyACM0", baudrate=1000000)
     print(rx150.readpos())
 
     # rx150.torque(enable=1)
@@ -182,7 +182,7 @@ if __name__ == "__main__":
     values = [2048, 2549, 1110, 1400, 3072, g_open]
     x = 320
     y = 90
-    end_angle = -30. / 180. * np.pi
+    end_angle = 30. / 180. * np.pi
     rx150.gogo(values, x, y, end_angle, 320, 90, end_angle, 3072, timestamp=300)
         #
         # rx150.torque(enable=1)
@@ -212,9 +212,9 @@ if __name__ == "__main__":
     c = input()
 
     rx150.torque(enable=1)
-    g_open = 800
+    g_open = 760
     values = [2048, 2549, 1110, 1400, 3072, g_open]
     x = 320
     y = 90
-    end_angle = -30. / 180. * np.pi
+    end_angle = 30. / 180. * np.pi
     rx150.gogo(values, x, y, end_angle, 320, 90, end_angle, 3072, timestamp=300)
