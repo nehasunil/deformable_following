@@ -41,6 +41,24 @@ def rx_move(g_open):
     end_angle = -30. / 180. * np.pi
     rx150.gogo(values, x, y, end_angle, 320, 90, end_angle, 3072, timestamp=30)
 
+def rx_regrasp():
+    rx_move(890)
+    time.sleep(0.5)
+    values = [2048, 2549, 1110, 1400, 3072, 890]
+    x = 335
+    y = 95
+    end_angle = -30. / 180. * np.pi
+    rx150.gogo(values, x, y, end_angle, x, y, end_angle, 3072, timestamp=30)
+    time.sleep(0.5)
+    values[-1] = 760
+    rx150.gogo(values, x, y, end_angle, x, y, end_angle, 3072, timestamp=30)
+    time.sleep(0.5)
+    x = 320
+    y = 90
+    rx150.gogo(values, x, y, end_angle, x, y, end_angle, 3072, timestamp=30)
+    time.sleep(0.5)
+
+
 # rx_move(2000)
 
 # sensor_id = "W03"
@@ -150,7 +168,7 @@ def test_combined():
             ur_xy = np.array(ur_pose[:2])
 
             x = 0.08 - pose[0] + 0.5 * (1 - 2*pose[1])*np.tan(pose[2])
-            alpha = np.arctan(ur_xy[0] - fixpoint_x)/(ur_xy[1] - fixpoint_y) * np.cos(np.pi * 15 / 180)
+            alpha = np.arctan(ur_xy[0] - fixpoint_x)/(ur_xy[1] - fixpoint_y) * np.cos(np.pi * 30 / 180)
 
             print("x: ", x)
 
@@ -159,7 +177,7 @@ def test_combined():
             state = np.array([[x*pixel_size],[pose[2]],[alpha]])
             phi = -K.dot(state)
 
-            noise = random.random() * 0.07 - 0.05
+            noise = random.random() * 0.07 - 0.02
             a = 0.8
             noise_acc = a * noise_acc + (1 - a) * noise
             phi += noise_acc
@@ -168,8 +186,11 @@ def test_combined():
             limit_phi = np.pi/3
             target_ur_dir = max(-limit_phi, min(target_ur_dir, limit_phi))
             v_norm = 0.01
-            vel = np.array([v_norm * sin(target_ur_dir)*cos(np.pi * 15 / 180), v_norm * cos(target_ur_dir), -v_norm * sin(target_ur_dir)*sin(np.pi * 15 / 180), 0, 0, 0])
+            vel = np.array([v_norm * sin(target_ur_dir)*cos(np.pi * 30 / 180), v_norm * cos(target_ur_dir), v_norm * sin(target_ur_dir)*sin(np.pi * -30 / 180), 0, 0, 0])
 
+            if x < -0.2:
+                print("regrasp")
+                rx_regrasp()
 
             if ur_pose[0] < -0.7:
                 vel[0] = max(vel[0], 0.)
