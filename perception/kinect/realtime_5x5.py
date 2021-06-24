@@ -42,7 +42,7 @@ def main():
         # If found, add object points, image points (after refining them)
         if ret == True:
             objpoints.append(objp)
-            corners2 = cv2.cornerSubPix(gray,corners, (3,3), (-1,-1), criteria)
+            corners2 = cv2.cornerSubPix(gray, corners, (3,3), (-1,-1), criteria)
             imgpoints.append(corners)
             # Draw and display the corners
             cv2.drawChessboardCorners(color, (3,3), corners2, ret)
@@ -55,7 +55,7 @@ def main():
 
         key = cv2.waitKey(1)
         if key == ord('s'):
-            cv2.imwrite(f"data/intrinsic_test/color_{id}.png", color)
+            cv2.imwrite(f"data/intrinsic_1080p/color_{id}.png", color)
             id += 1
         elif key == ord('q'):
             cv2.destroyAllWindows()

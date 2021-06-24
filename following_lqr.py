@@ -26,7 +26,7 @@ grc = Gripper_Controller()
 urc.start()
 grc.start()
 
-pose0 = np.array([-0.505, -0.219, 0.235, -1.129, -1.226, 1.326])
+pose0 = np.array([-0.505-.1693, -0.219, 0.235, -1.129, -1.226, 1.326])
 grc.gripper_helper.set_gripper_current_limit(0.6)
 
 
@@ -167,37 +167,44 @@ def test_combined():
             ur_pose = urc.getl_rt()
             ur_xy = np.array(ur_pose[:2])
 
-            x = 0.08 - pose[0] + 0.5 * (1 - 2*pose[1])*np.tan(pose[2])
+            x = 0.05 - pose[0] + 0.5 * (1 - 2*pose[1])*np.tan(pose[2])
             alpha = np.arctan(ur_xy[0] - fixpoint_x)/(ur_xy[1] - fixpoint_y) * np.cos(np.pi * 30 / 180)
 
-            print("x: ", x)
+            print("x: ", x, "; input: ", x*pixel_size)
 
-            K = np.array([6528.5, 0.79235, 2.18017])
+            # K = np.array([6528.5, 0.79235, 2.18017]) #10 degrees
+            # K = np.array([7012, 8.865, 6.435]) #30 degrees
+            K = np.array([1383, 3.682, 3.417])
 
             state = np.array([[x*pixel_size],[pose[2]],[alpha]])
             phi = -K.dot(state)
 
-            noise = random.random() * 0.07 - 0.02
-            a = 0.8
-            noise_acc = a * noise_acc + (1 - a) * noise
-            phi += noise_acc
+            # noise = random.random() * 0.07 - 0.02
+            # a = 0.8
+            # noise_acc = a * noise_acc + (1 - a) * noise
+            # phi += noise_acc
 
             target_ur_dir = phi + alpha
             limit_phi = np.pi/3
             target_ur_dir = max(-limit_phi, min(target_ur_dir, limit_phi))
+            if abs(target_ur_dir) == limit_phi:
+                print("reached phi limit")
             v_norm = 0.01
             vel = np.array([v_norm * sin(target_ur_dir)*cos(np.pi * 30 / 180), v_norm * cos(target_ur_dir), v_norm * sin(target_ur_dir)*sin(np.pi * -30 / 180), 0, 0, 0])
 
-            if x < -0.2:
-                print("regrasp")
-                rx_regrasp()
+            # if x < -0.2:
+            #     print("regrasp")
+            #     rx_regrasp()
 
-            if ur_pose[0] < -0.7:
+            if ur_pose[0] < -0.7-.1693:
                 vel[0] = max(vel[0], 0.)
-            if ur_pose[0] > -0.3:
+                print("reached x limit")
+            if ur_pose[0] > -0.3-.1693:
                 vel[0] = min(vel[0], 0.)
+                print("reached x limit")
             if ur_pose[2] < .08:
                 vel[2] = 0.
+                print("reached z limit")
             if ur_pose[1] > .34:
                 print("end of workspace")
                 print("log saved: ", logger.save_logs())
@@ -206,7 +213,7 @@ def test_combined():
                 vel[1] = 0.
 
 
-            print("sliding vel ", vel[0], "posx ", pos_x)
+            # print("sliding vel ", vel[0], "posx ", pos_x)
 
             vel = np.array(vel)
             urc.speedl(vel, a=a, t=dt*2)

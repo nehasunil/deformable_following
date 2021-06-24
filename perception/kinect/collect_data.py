@@ -8,7 +8,7 @@ import numpy as np
 def main():
     k4a = PyK4A(
         Config(
-            color_resolution=pyk4a.ColorResolution.RES_720P,
+            color_resolution=pyk4a.ColorResolution.RES_1080P,
             depth_mode=pyk4a.DepthMode.NFOV_UNBINNED,
         )
     )
@@ -30,12 +30,12 @@ def main():
         if capture.transformed_depth is not None:
             depth_transformed = capture.transformed_depth
             cv2.imshow(
-                "Transformed Depth", colorize(depth_transformed, (600, 1100))
+                "Transformed Depth", colorize(depth_transformed, (0, 1100))
             )
 
         key = cv2.waitKey(1)
         if key == ord('s'):
-            cv2.imwrite(f"data/intrinsic_test/color_{id}.png", color)
+            cv2.imwrite(f"data/intrinsic_1080p/color_{id}.png", color)
             id += 1
         elif key == ord('q'):
             cv2.destroyAllWindows()
