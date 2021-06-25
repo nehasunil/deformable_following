@@ -138,7 +138,22 @@ def loadall():
             Y = np.vstack([Y, y])
         except:
             print(filename)
-
+        # break
+    # for filename in glob.glob('data/logs/initialtesting/linearGPLQR/*.p'):
+    #     logs = read_logs(filename)
+    #     x, y = parse(logs)
+    #     X = np.vstack([X, x])
+    #     Y = np.vstack([Y, y])
+    # for filename in glob.glob('data/logs/initialtesting/linearLQR/*.p'):
+    #     logs = read_logs(filename)
+    #     x, y = parse(logs)
+    #     X = np.vstack([X, x])
+    #     Y = np.vstack([Y, y])
+    # for filename in glob.glob('data/logs/initialtesting/tvLQR/*.p'):
+    #     logs = read_logs(filename)
+    #     x, y = parse(logs)
+    #     X = np.vstack([X, x])
+    #     Y = np.vstack([Y, y])
 
     print(X.shape, Y.shape)
     return X, Y
