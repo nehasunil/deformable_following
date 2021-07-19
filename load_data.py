@@ -68,6 +68,9 @@ def parse(logs):
     # beta = np.arcsin((ur_v[:,0])/((ur_v[:,0]**2+ur_v[:,1]**2)**0.5)) # use test case to check signs
     beta = np.arcsin((ur_v[:, 0]) * np.cos(np.pi*30/180) / (((ur_v[:, 0]*np.cos(np.pi*30/180)) ** 2 + ur_v[:, 1] ** 2) ** 0.5))
 
+    # print(ur_xy[-1][0])
+    # print("distance followed: ", (((ur_xy[-1][0] - fixpoint_x)**2 + (ur_xy[-1][1] - fixpoint_y)**2)**0.5)/0.00559)
+
     # print("UR_V", ur_v[:,:2], "BETA", beta)
 
     # for i in range(5):
@@ -130,14 +133,16 @@ def loadall():
     # for filename in glob.glob('logs/1908290930/*.p'):
     # for filename in glob.glob('data/logs/20210503/*.p'):
     for filename in glob.glob('data/logs/20210611_30/*.p'):
+    # for filename in glob.glob('data/logs/20210629_tvlqr/*.p'):
         # print(filename)
         logs = read_logs(filename)
         try:
+            print(filename)
             x, y = parse(logs)
             X = np.vstack([X, x])
             Y = np.vstack([Y, y])
         except:
-            print(filename)
+            print("lost one")
         # break
     # for filename in glob.glob('data/logs/initialtesting/linearGPLQR/*.p'):
     #     logs = read_logs(filename)

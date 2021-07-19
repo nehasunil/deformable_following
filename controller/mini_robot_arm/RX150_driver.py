@@ -17,7 +17,6 @@ class RX150_IK:
         self.l3 = 150
 
         self.O = np.array([[0], [0]])
-        pass
 
     def fk(self, t2, t3):
         l2, lT, l3 = self.l2, self.lT, self.l3
@@ -46,6 +45,7 @@ class RX150_IK:
         angle = end_angle
         l_end = 150.0
         fix_end_angle = -0.3
+        # fix_end_angle = 0
 
         x -= l_end * cos(angle)
         y += l_end * sin(angle)
@@ -81,9 +81,43 @@ class RX150_IK:
 class RX150_Driver:
     def __init__(self, port="/dev/tty.usbmodem145301", baudrate=1000000):
         self.rx150_ik = RX150_IK()
+
         self.ser = serial.Serial(port, baudrate)  # open serial port
         print(self.ser.name)  # check which port was really used
 
+        # initialize initial joint angle for ik
+        time.sleep(0.2)
+        joints = self.readpos_float()
+
+        t2 = (2048 - joints[1]) / 2048. * pi
+        t3 = (2048 - joints[2]) / 2048. * pi
+
+        self.rx150_ik.O = np.array([[t2], [t3]])
+
+
+        # x, y, angle
+        self.last_joint = None
+
+    def update_pos(self):
+        fix_end_angle = -0.3
+
+        time.sleep(0.2)
+        joints = self.readpos_float()
+
+        t2 = (2048 - joints[1]) / 2048. * pi
+        t3 = (2048 - joints[2]) / 2048. * pi
+        t4 = (2048 - joints[3]) / 2048. * pi
+        end_angle = t2 + t3 + t4 + fix_end_angle
+
+        x = np.array(self.rx150_ik.fk(t2, t3))
+
+        angle = end_angle
+        l_end = 150.0
+
+        x[0] += l_end * cos(angle)
+        x[1] -= l_end * sin(angle)
+
+        self.last_joint = (x[0], x[1], end_angle)
 
     def readpos(self):
         self.ser.write(str.encode("readpos \n"))
@@ -91,6 +125,11 @@ class RX150_Driver:
             line = self.ser.readline()
         return line
 
+    def readpos_float(self):
+        line = self.readpos()
+        elems = line.decode('utf-8').split(' ')[:-1]
+        elems = [float(_) for _ in elems]
+        return elems
 
     def torque(self, enable=1):
         self.ser.write(str.encode("torque {}\n".format(enable)))
@@ -113,22 +152,35 @@ class RX150_Driver:
         values[3] = int(joint[2, 0])
 
 
-    def gogo(self, values, x, y, ang, goal_x, goal_y, goal_ang, goal_rot, timestamp=30.0):
-        # timestamp = 30.
+    def gogo(self, values, goal_x, goal_y, goal_ang, goal_rot, timestamp=30.0):
+        if self.last_joint is None:
+            self.update_pos()
+
+        # resolve ambiguity for rotation angle
+        joints = self.readpos_float()
+        values[-2] = joints[4]
+        if np.abs(goal_rot - joints[4] + 4096) < np.abs(goal_rot - joints[4]):
+            goal_rot += 4096
+        elif np.abs(goal_rot - joints[4] - 4096) < np.abs(goal_rot - joints[4]):
+            goal_rot -= 4096
+
+        x, y, ang = self.last_joint
         dx = (goal_x - x) / timestamp
         dy = (goal_y - y) / timestamp
         da = (goal_ang - ang) / timestamp
         dr = (goal_rot - values[-2]) / timestamp
 
-        # for t in range(int(timestamp)):
-        #     x += dx
-        #     y += dy
-        #     ang += da
-        #     values[-2] += dr
-        #     # print(dx, dy, da, dr)
-        #     self.setxy(values, ang, x, y)
-        #     self.send(values)
-        #     time.sleep(0.01)
+        self.last_joint = (goal_x, goal_y, goal_ang)
+
+        for t in range(int(timestamp)):
+            x += dx
+            y += dy
+            ang += da
+            values[-2] += dr
+            # print(dx, dy, da, dr)
+            self.setxy(values, ang, x, y)
+            self.send(values)
+            time.sleep(0.01)
 
         x = goal_x
         y = goal_y
@@ -178,12 +230,18 @@ if __name__ == "__main__":
     # rx150.gogo(values, x, y, end_angle, 320, 90, end_angle, 3072, timestamp=300)
 
     rx150.torque(enable=1)
-    g_open = 1200
-    values = [2048, 2549, 1110, 1400, 3072, g_open]
-    x = 320
+    g_open = 1600
+    values = [1024, 2549, 1110, 1400, 0, g_open]
+    # x = 420
+    # x = 380
+    x = 270
     y = 90
-    end_angle = 30. / 180. * np.pi
-    rx150.gogo(values, x, y, end_angle, 320, 90, end_angle, 3072, timestamp=300)
+    end_angle = 0#-90*np.pi/180
+    # end_angle = 45*np.pi/180
+    # 270 - 420
+    inc = 1
+    rx150.gogo(values, x, y, end_angle, 0, timestamp=100)
+
         #
         # rx150.torque(enable=1)
         # g_open = 1700
@@ -207,14 +265,14 @@ if __name__ == "__main__":
     # x = 210
     # y = 150
     # end_angle = -50. / 180. * np.pi
-    # rx150.gogo(values, x, y, end_angle, 220, 140, end_angle, 3072, timestamp=300)
-
-    c = input()
-
-    rx150.torque(enable=1)
-    g_open = 760
-    values = [2048, 2549, 1110, 1400, 3072, g_open]
-    x = 320
-    y = 90
-    end_angle = 30. / 180. * np.pi
-    rx150.gogo(values, x, y, end_angle, 320, 90, end_angle, 3072, timestamp=300)
+    # # rx150.gogo(values, x, y, end_angle, 220, 140, end_angle, 3072, timestamp=300)
+    #
+    # c = input()
+    #
+    # rx150.torque(enable=1)
+    # g_open = 760
+    # values = [2048, 2549, 1110, 1400, 3072, g_open]
+    # x = 320
+    # y = 90
+    # end_angle = 30. / 180. * np.pi
+    # rx150.gogo(values, x, y, end_angle, 320, 90, end_angle, 3072, timestamp=300)

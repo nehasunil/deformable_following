@@ -5,6 +5,7 @@ import numpy as np
 import time
 import cv2
 from controller.ur5.ur_controller import UR_Controller
+from controller.mini_robot_arm.RX150_driver import RX150_Driver
 from perception.kinect.kinect_camera import Kinect
 from scipy.spatial.transform import Rotation as R
 from controller.gripper.gripper_control import Gripper_Controller
@@ -37,21 +38,33 @@ urc.start()
 a = 0.2
 v = 0.2
 
+rx150 = RX150_Driver(port="/dev/ttyACM0", baudrate=1000000)
+rx150.torque(enable=1)
+print(rx150.readpos())
+
+def rx_move(g_open, x_pos):
+    values = [1024, 2549, 1110, 1400, 0, g_open]
+    x = x_pos
+    y = 90
+    end_angle = 0
+    rx150.gogo(values, x, 90, end_angle, 0, timestamp=100)
+
 # workspace_limits = np.asarray([[0.3, 0.748], [-0.224, 0.224], [-0.255, -0.1]]) # Cols: min max, Rows: x y z (define workspace limits in robot coordinates)
 workspace_limits = np.asarray([[-0.845, -0.605], [-0.14, 0.2], [0, 0.2]]) # Cols: min max, Rows: x y z (define workspace limits in robot coordinates)
 
 # tool_orientation = [2.22,-2.22,0]
 # tool_orientation = [0., -np.pi/2, 0.] # [0,-2.22,2.22] # [2.22,2.22,0]
 from scipy.spatial.transform import Rotation as R
-# tool_orientation_euler = [180, 0, 90]
+tool_orientation_euler = [180, 0, 90]
 # tool_orientation_euler = [180, 0, 0]
-tool_orientation_euler = [180, 0, 180]
+# tool_orientation_euler = [180, 0, 180]
 tool_orientation = R.from_euler('xyz', tool_orientation_euler, degrees=True).as_rotvec()
 # tool_orientation = [0., -np.pi, 0.] # [0,-2.22,2.22] # [2.22,2.22,0]
 
 # pose0 = np.array([-0.511, 0.294, 0.237, -0.032, -1.666, 0.138])
 pose0 = np.hstack([[-0.505, 0.06, 0.2], tool_orientation])
 pose_up = pose0.copy()
+pose_transfer = np.array([-0.431, -0.032, 0.232, -2.230, -2.194, -0.019])
 
 urc.movel_wait(pose0, a=a, v=v)
 # ---------------------------------------------
@@ -101,14 +114,14 @@ def mouseclick_callback(event, x, y, flags, param):
 
 
         target_position = target_position[0:3,0]
-        print(x, y)
-        # target_position[2] -= 0.03
-        if target_position[2] < -0.118:
-            print("WARNNING: Reach Z Limit, set to minimal Z")
-            target_position[2] = -0.118
-        # robot.move_to(target_position, tool_orientation)
-        pose = np.hstack([target_position, tool_orientation])
-        urc.movel_wait(pose, a=a, v=v)
+        # print(x, y)
+        # # target_position[2] -= 0.03
+        # if target_position[2] < -0.118:
+        #     print("WARNNING: Reach Z Limit, set to minimal Z")
+        #     target_position[2] = -0.118
+        # # robot.move_to(target_position, tool_orientation)
+        # pose = np.hstack([target_position, tool_orientation])
+        # urc.movel_wait(pose, a=a, v=v)
 
 
 # Show color and depth frames
@@ -117,7 +130,9 @@ cv2.setMouseCallback('color', mouseclick_callback)
 cv2.namedWindow('depth')
 
 seq_id = 0
-sequence = [ord('p'), ord('g'), ord('h'), ord('r'), ord('g')]
+# sequence = [ord('p'), ord('g'), ord('h'), ord('r'), ord('g')]
+sequence = [ord('p'), ord('g'), ord('h'), ord('g'), ord('d')]
+
 
 
 ###################################################
@@ -324,7 +339,7 @@ while True:
     # ind_highest = np.unravel_index(np.argmax(z_ws_blur, axis=None), z_ws_blur.shape)
     # xyz_robot_highest = [ind_highest[1] / scale + xlim[0], ind_highest[0] / scale + ylim[0], z_ws[ind_highest]]
 
-    x_high, y_high = np.where(z_ws_blur >= (z_ws_blur.min() + (z_ws_blur.max() - z_ws_blur.min()) *0.6))
+    x_high, y_high = np.where(z_ws_blur >= (z_ws_blur.min() + (z_ws_blur.max() - z_ws_blur.min()) *0.8))
     ind = np.random.randint(len(x_high))
     grasp_point = (x_high[ind], y_high[ind])
 
@@ -352,14 +367,26 @@ while True:
         time.sleep(0.5)
         print("GRASP"*20)
     elif c == ord('h'):
-        tool_orientation_euler = [180, 0, 180]
-        tool_orientation_euler[2] = np.random.randint(180)+90
-        tool_orientation = R.from_euler('xyz', tool_orientation_euler, degrees=True).as_rotvec()
-        random_perturb_rng = 0.05
-        pose_up = np.hstack([[-0.505+np.random.random()*random_perturb_rng - random_perturb_rng / 2, 0.06 + np.random.random()*random_perturb_rng - random_perturb_rng / 2, 0.2], tool_orientation])
-        move_record(pose_up, a=a, v=v)
+        # tool_orientation_euler = [180, 0, 180]
+        # tool_orientation_euler[2] = np.random.randint(180)+90
+        # tool_orientation = R.from_euler('xyz', tool_orientation_euler, degrees=True).as_rotvec()
+        # random_perturb_rng = 0.05
+        # pose_up = np.hstack([[-0.505+np.random.random()*random_perturb_rng - random_perturb_rng / 2, 0.06 + np.random.random()*random_perturb_rng - random_perturb_rng / 2, 0.2], tool_orientation])
+        rx_move(1600, 270)
+        time.sleep(0.5)
+        move_record(pose_transfer, a=a, v=v)
+        time.sleep(0.5)
+        rx_move(1600, 420)
+        time.sleep(0.5)
+        rx_move(760, 420)
+    elif c == ord('d'):
+        time.sleep(0.5)
+        rx_move(1600, 420)
+        time.sleep(0.5)
+        rx_move(1600, 270)
+        time.sleep(0.5)
     elif c == ord('p'):
-        xyz_robot_highest[2] -= 0.02
+        xyz_robot_highest[2] -= 0.03
         if xyz_robot_highest[2] < -0.118:
             print("WARNNING: Reach Z Limit, set to minimal Z")
             xyz_robot_highest[2] = -0.118

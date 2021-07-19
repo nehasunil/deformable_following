@@ -1,5 +1,5 @@
-from control.gripper.gripper_control import Gripper_Controller
-from control.ur5.ur_controller import UR_Controller
+from controller.gripper.gripper_control import Gripper_Controller
+from controller.ur5.ur_controller import UR_Controller
 import time
 import numpy as np
 
@@ -19,6 +19,9 @@ pose2 = np.array([-0.481, 0.283, 0.359, -1.216, -1.480, -.8])
 
 
 grc.follow_gripper_pos = 0
+# c = input()
+# grc.follow_gripper_pos = 1
+
 #
 #
 # a = 0.05

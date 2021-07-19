@@ -27,7 +27,7 @@ class Gripper_Controller(Thread):
             time.sleep(0.01)
 
 class GripperHelper(object):
-        def __init__(self, DXL_ID, min_position, max_position, DEVICENAME='/dev/ttyUSB1'):
+        def __init__(self, DXL_ID, min_position, max_position, DEVICENAME='/dev/ttyUSB0'):
             self.DXL_ID = DXL_ID
             self.min_position = min_position
             self.max_position = max_position

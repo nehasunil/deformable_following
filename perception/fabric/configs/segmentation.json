@@ -1,0 +1,15 @@
+{
+    "n_feature": 3,
+    "n_class": 3,
+    "transform": true,
+    "lr": 1e-3,
+    "momentum": 0,
+    "w_decay": 0,
+    "step_size": 30,
+    "gamma": 0.5,
+    "datasize": 10000,
+    "runspath": "/home/gelsight/Code/Fabric/models",
+    "datapath": "/home/gelsight/Code/Fabric/src/data/imgs/0625_10k",
+    "batch_size": 4,
+    "epochs": 250
+}
