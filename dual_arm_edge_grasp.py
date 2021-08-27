@@ -17,6 +17,7 @@ import skimage.measure
 import torchvision.transforms as T
 import os
 from perception.kinect.Vis3D import ClassVis3D
+from perception.fabric.grasp_selector import select_grasp
 
 # n, m = 650, 650
 # Vis3D = ClassVis3D(m, n)
@@ -101,12 +102,13 @@ time.sleep(0.5)
 # robot.joint_acc = 1.4
 # robot.joint_vel = 1.05
 
-crop_x_normal = [300, 950]
-crop_y_normal = [255, 905]
 
+
+crop_x_normal=[300, 950]
+crop_y_normal=[255, 905]
 surface_normal = None
 
-def get_surface_normal(camera_color_img, camera_depth_img):
+def get_surface_normal(camera_color_img, camera_depth_img, crop_x_normal=[300, 950], crop_y_normal=[255, 905]):
 
     camera_depth_img_crop = camera_depth_img[crop_y_normal[0]:crop_y_normal[1], crop_x_normal[0]:crop_x_normal[1]]
     camera_color_img_crop = camera_color_img[crop_y_normal[0]:crop_y_normal[1], crop_x_normal[0]:crop_x_normal[1]]
@@ -189,109 +191,122 @@ flag_waiting_for_click = False
 click_point_pix = ()
 # camera_color_img, camera_depth_img = robot.get_camera_data()
 camera_color_img, camera_depth_img = camera.get_image()
+
+def grasp_xy(x, y):
+    # input: x, y in image frame
+    # action: UR5 feed the grasp point to rx150
+    global camera, robot, click_point_pix, flag_waiting_for_click
+    click_point_pix = (x,y)
+
+    # Get click point in camera coordinates
+    click_z = camera_depth_img[y][x] * cam_depth_scale
+    click_x = np.multiply(x-cam_intrinsics[0][2],click_z/cam_intrinsics[0][0])
+    click_y = np.multiply(y-cam_intrinsics[1][2],click_z/cam_intrinsics[1][1])
+    if click_z == 0:
+        flag_waiting_for_click = False
+        return False
+    click_point = np.asarray([click_x,click_y,click_z])
+    click_point.shape = (3,1)
+
+    # Convert camera to robot coordinates
+    # camera2robot = np.linalg.inv(robot.cam_pose)
+    camera2robot = cam_pose
+    target_position = np.dot(camera2robot[0:3,0:3],click_point) + camera2robot[0:3,3:]
+
+    pose_curr = urc.getl_rt()
+    target_position = target_position[0:3,0]
+    print(x, y)
+    pose_rx150 = [-0.431, -0.063, 0.212]
+
+    pose_move = pose_curr.copy()
+    pose_move[:3] += pose_rx150[:3] - target_position[:3]
+    if pose_move[0] < pose_rx150[0] - 0.2 or pose_move[0] > pose_rx150[0] + 0.2:
+        print("WARNING: REACHING X WORKSPACE LIMIT!!!!!")
+        flag_waiting_for_click = False
+        return False
+    if pose_move[1] < -0.004 and pose_move[2] < 0.245:
+        print("WARNING: REACHING Y/Z WORKSPACE LIMIT!!!!!")
+        pose_move[1] = -0.004
+        pose_move[2] = 0.245
+    if pose_move[2] > 0.483:
+        print("Desired Z", pose_move[2])
+        print("WARNING: REACHING Z WORKSPACE LIMIT")
+        return False
+
+
+    normal_click = surface_normal[y - crop_y_normal[0], x - crop_x_normal[0]]
+
+    theta = np.arctan2(normal_click[1], normal_click[0])
+    print("ROTATING (before clipping)", theta / np.pi * 180)
+
+    if theta > np.pi/2:
+        theta -= np.pi
+    if theta < -np.pi/2:
+        theta += np.pi
+    # theta[theta > np.pi/2] -= np.pi
+    # theta[theta < -np.pi/2] += np.pi
+    # cv2.imshow("surface_normal", surface_normal / 2 + 0.5)
+    print("ROTATING", theta / np.pi * 180)
+
+    # tool_orientation_euler = [180, 0, 90]
+    tool_orientation_rotvec = R.from_rotvec(pose_curr[3:])
+    trans = R.from_euler('xyz', [0, 0, -theta / np.pi * 180], degrees=True)
+    tool_orientation_rotvec = trans * tool_orientation_rotvec
+    # tool_orientation_euler[2] -= theta / np.pi * 180
+    tool_orientation = tool_orientation_rotvec.as_rotvec()
+    # tool_orientation = R.from_euler('xyz', tool_orientation_euler, degrees=True).as_rotvec()
+
+    rx, ry = target_position[0] - pose_curr[0], target_position[1] - pose_curr[1]
+    r = (rx**2 + ry**2) ** 0.5
+    # dx, dy = r * np.sin(theta), r * (np.cos(theta) - 1)
+
+    nxy = np.array([[np.cos(-theta), -np.sin(-theta)], [np.sin(-theta), np.cos(-theta)]]) @ np.array([[rx], [ry]]) + np.array([[pose_curr[0]], [pose_curr[1]]])
+    dx, dy = (nxy[0, 0] - target_position[0]), (nxy[1, 0] - target_position[1])
+
+    pose_move[0] -= dx
+    pose_move[1] -= dy
+
+
+    # pose0 = np.array([-0.511, 0.294, 0.237, -0.032, -1.666, 0.138])
+    # Go to target Z, and rotate
+    pose_rotate = np.hstack([pose_curr[:3], tool_orientation])
+    pose_rotate[2] = pose_move[2]
+    pose_rotate[0] = pose_move[0]
+    urc.movel_wait(pose_rotate, a=a, v=v)
+
+
+
+    # pose_curr[2] = pose_move[2]
+    # urc.movel_wait(pose_curr, a=a, v=v)
+
+    # Go to target X&Y
+    pose_rotate[:2] = pose_move[:2]
+    urc.movel_wait(pose_rotate, a=a, v=v)
+
+
+
+    flag_waiting_for_click = False
+
+    return True
+
+
+
+    # goal y: -0.063, z: 0.222
+
+
+    # target_position = target_position[0:3,0]
+    # print(x, y)
+    # # target_position[2] -= 0.03
+    # if target_position[2] < -0.118:
+    #     print("WARNNING: Reach Z Limit, set to minimal Z")
+    #     target_position[2] = -0.118
+    # # robot.move_to(target_position, tool_orientation)
+    # pose = np.hstack([target_position, tool_orientation])
+    # urc.movel_wait(pose, a=a, v=v)
+
 def mouseclick_callback(event, x, y, flags, param):
     if event == cv2.EVENT_LBUTTONDOWN:
-        global camera, robot, click_point_pix, flag_waiting_for_click
-        click_point_pix = (x,y)
-
-        # Get click point in camera coordinates
-        click_z = camera_depth_img[y][x] * cam_depth_scale
-        click_x = np.multiply(x-cam_intrinsics[0][2],click_z/cam_intrinsics[0][0])
-        click_y = np.multiply(y-cam_intrinsics[1][2],click_z/cam_intrinsics[1][1])
-        if click_z == 0:
-            flag_waiting_for_click = False
-            return
-        click_point = np.asarray([click_x,click_y,click_z])
-        click_point.shape = (3,1)
-
-        # Convert camera to robot coordinates
-        # camera2robot = np.linalg.inv(robot.cam_pose)
-        camera2robot = cam_pose
-        target_position = np.dot(camera2robot[0:3,0:3],click_point) + camera2robot[0:3,3:]
-
-        pose_curr = urc.getl_rt()
-        target_position = target_position[0:3,0]
-        print(x, y)
-        pose_rx150 = [-0.431, -0.063, 0.212]
-
-        pose_move = pose_curr.copy()
-        pose_move[:3] += pose_rx150[:3] - target_position[:3]
-        if pose_move[0] < pose_rx150[0] - 0.2 or pose_move[0] > pose_rx150[0] + 0.2:
-            print("WARNING: REACHING X WORKSPACE LIMIT!!!!!")
-            flag_waiting_for_click = False
-            return
-        if pose_move[1] < -0.004 and pose_move[2] < 0.245:
-            print("WARNING: REACHING Y/Z WORKSPACE LIMIT!!!!!")
-            pose_move[1] = -0.004
-            pose_move[2] = 0.245
-
-        normal_click = surface_normal[y - crop_y_normal[0], x - crop_x_normal[0]]
-
-        theta = np.arctan2(normal_click[1], normal_click[0])
-        print("ROTATING (before clipping)", theta / np.pi * 180)
-
-        if theta > np.pi/2:
-            theta -= np.pi
-        if theta < -np.pi/2:
-            theta += np.pi
-        # theta[theta > np.pi/2] -= np.pi
-        # theta[theta < -np.pi/2] += np.pi
-        # cv2.imshow("surface_normal", surface_normal / 2 + 0.5)
-        print("ROTATING", theta / np.pi * 180)
-
-        # tool_orientation_euler = [180, 0, 90]
-        tool_orientation_rotvec = R.from_rotvec(pose_curr[3:])
-        trans = R.from_euler('xyz', [0, 0, -theta / np.pi * 180], degrees=True)
-        tool_orientation_rotvec = trans * tool_orientation_rotvec
-        # tool_orientation_euler[2] -= theta / np.pi * 180
-        tool_orientation = tool_orientation_rotvec.as_rotvec()
-        # tool_orientation = R.from_euler('xyz', tool_orientation_euler, degrees=True).as_rotvec()
-
-        rx, ry = target_position[0] - pose_curr[0], target_position[1] - pose_curr[1]
-        r = (rx**2 + ry**2) ** 0.5
-        # dx, dy = r * np.sin(theta), r * (np.cos(theta) - 1)
-
-        nxy = np.array([[np.cos(-theta), -np.sin(-theta)], [np.sin(-theta), np.cos(-theta)]]) @ np.array([[rx], [ry]]) + np.array([[pose_curr[0]], [pose_curr[1]]])
-        dx, dy = (nxy[0, 0] - target_position[0]), (nxy[1, 0] - target_position[1])
-
-        pose_move[0] -= dx
-        pose_move[1] -= dy
-
-
-        # pose0 = np.array([-0.511, 0.294, 0.237, -0.032, -1.666, 0.138])
-        # Go to target Z, and rotate
-        pose_rotate = np.hstack([pose_curr[:3], tool_orientation])
-        pose_rotate[2] = pose_move[2]
-        pose_rotate[0] = pose_move[0]
-        urc.movel_wait(pose_rotate, a=a, v=v)
-
-
-
-        # pose_curr[2] = pose_move[2]
-        # urc.movel_wait(pose_curr, a=a, v=v)
-
-        # Go to target X&Y
-        pose_rotate[:2] = pose_move[:2]
-        urc.movel_wait(pose_rotate, a=a, v=v)
-
-
-
-        flag_waiting_for_click = False
-
-
-
-        # goal y: -0.063, z: 0.222
-
-
-        # target_position = target_position[0:3,0]
-        # print(x, y)
-        # # target_position[2] -= 0.03
-        # if target_position[2] < -0.118:
-        #     print("WARNNING: Reach Z Limit, set to minimal Z")
-        #     target_position[2] = -0.118
-        # # robot.move_to(target_position, tool_orientation)
-        # pose = np.hstack([target_position, tool_orientation])
-        # urc.movel_wait(pose, a=a, v=v)
+        grasp_xy(x, y)
 
 
 # Show color and depth frames
@@ -397,6 +412,11 @@ def demo_segmentation():
     # get kinect images
     color, depth_transformed = camera.get_image()
 
+
+    surface_normal = get_surface_normal(color, depth_transformed, crop_x_normal=[topleft[1], bottomright[1]], crop_y_normal=[topleft[0], bottomright[0]])
+    cv2.imshow("surface_normal", ((surface_normal / 2 + 0.5) * 255).astype(np.uint8))
+    cv2.waitKey(1)
+
     # Crop images
     color_small = cv2.resize(color, (0, 0), fx=1, fy=1)
     color_small = color_small[
@@ -407,6 +427,8 @@ def demo_segmentation():
     depth_transformed_small = depth_transformed_small[
         topleft[1] : bottomright[1], topleft[0] : bottomright[0]
     ]
+
+    surface_normal_small = surface_normal.copy()
 
     depth_min = 400.0
     depth_max = 1100.0
@@ -434,6 +456,8 @@ def demo_segmentation():
     cv2.imshow("prediction", mask)
     cv2.waitKey(1)
 
+    return color_small, depth_transformed_small, seg_pred, surface_normal_small
+
 
 def move_record(pose, a, v):
     urc.movel_nowait(pose, a=a, v=v)
@@ -444,6 +468,40 @@ def move_record(pose, a, v):
             break
         time.sleep(0.05)
 
+def grasp_policy():
+    retry = 30
+
+    for i in range(retry):
+        color_small, depth_transformed_small, seg_pred, surface_normal_small = demo_segmentation()
+        surface_normal_100x100 = cv2.resize(surface_normal_small, (seg_pred.shape[1], seg_pred.shape[0]))
+        outer_pt_x, outer_pt_y, angle, inner_pt_x, inner_pt_y = select_grasp(seg_pred, surface_normal_100x100, num_neighbour=100)
+        print(outer_pt_x, outer_pt_y, angle, inner_pt_x, inner_pt_y)
+
+        #draw grasp point
+        K = 3
+        pt1 = (outer_pt_y * 4, outer_pt_x * 4)
+        pt2 = ((outer_pt_y + (inner_pt_y - outer_pt_y) * K) * 4, (outer_pt_x + (inner_pt_x - outer_pt_x) * K) * 4)
+        color = (0, 0, 255)
+        grasp_img = color_small.copy()
+        if ((inner_pt_y - outer_pt_y)**2 + (inner_pt_x - outer_pt_x) ** 2) ** 0.5 <= 6:
+            cv2.arrowedLine(grasp_img, pt1, pt2, color, 3, tipLength=0.2)
+        cv2.imshow("grasp", grasp_img)
+        cv2.waitKey(1)
+
+
+        img_x, img_y = inner_pt_x * 4 + topleft[1], inner_pt_y * 4 + topleft[0]
+
+        if outer_pt_x + outer_pt_y + angle + inner_pt_x + inner_pt_y == 0:
+            continue
+
+        # flag_grasp = grasp_xy(img_y, img_x)
+
+        # if flag_grasp:
+        #     break
+
+
+# while True:
+#     grasp_policy()
 
 while True:
     # if seq_id % len(sequence) == 0:
@@ -557,6 +615,17 @@ while True:
         #     rx_move(1600, 420)
         #     time.sleep(0.5)
         #     rx_move(760, 420)
+        grasp_policy()
+        rx_move(1600, 420)
+        time.sleep(0.5)
+        rx_move(760, 420)
+
+        # lower ur5 gripper for less acceleration
+        pose_tmp = urc.getl_rt()
+        if pose_tmp[2] >= 0.32:
+            pose_tmp[2] = 0.32
+            urc.movel_wait(pose_tmp)
+
     elif c == ord('c'):
         break
     elif c == ord('g'):
@@ -597,16 +666,16 @@ while True:
         pose_up = np.hstack([pose_up[:3], tool_orientation])
         move_record(pose_up, a=a, v=v)
 
-    # record_kinect()
-#     time.sleep(0.05)
-#
-#     if count > 10000:
-#         break
-#
-#
-#
-#
-#
-#
-#
-# cv2.destroyAllWindows()
+    record_kinect()
+    time.sleep(0.05)
+
+    if count > 10000:
+        break
+
+
+
+
+
+
+
+cv2.destroyAllWindows()

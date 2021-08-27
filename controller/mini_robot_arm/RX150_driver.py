@@ -4,6 +4,7 @@ import numpy as np
 from math import sin, cos, pi
 import time
 import random
+from threading import Thread
 
 img = np.zeros([300, 300])
 
@@ -177,6 +178,7 @@ class RX150_Driver:
             y += dy
             ang += da
             values[-2] += dr
+            print("Goal rot", goal_rot, "Cur rot", values[-2])
             # print(dx, dy, da, dr)
             self.setxy(values, ang, x, y)
             self.send(values)
@@ -217,62 +219,88 @@ class RX150_Driver:
         self.send(values)
         # time.sleep(0.03)
 
-if __name__ == "__main__":
+
+class RX150_Driver_Thread(Thread):
+    def __init__(self, port="/dev/ttyACM0", baudrate=1000000):
+        Thread.__init__(self)
+        self.rx150 = RX150_Driver(port=port, baudrate=baudrate)
+        self.command = None
+        self.last_command = None
+        self.running = True
+
+    def gogo(self, values, goal_x, goal_y, goal_ang, goal_rot, timestamp=30.0):
+        self.command = (values, goal_x, goal_y, goal_ang, goal_rot, timestamp)
+
+    def follow(self):
+        while self.running:
+            if self.command is not None and (self.last_command is None or self.command != self.last_command):
+                self.last_command = self.command
+                print(self.command)
+                self.rx150.gogo(*self.command)
+            time.sleep(0.01)
+
+
+    def run(self):
+        self.follow()
+
+
+def main():
     rx150 = RX150_Driver(port="/dev/ttyACM0", baudrate=1000000)
     print(rx150.readpos())
 
-    # rx150.torque(enable=1)
-    # g_open = 1100
-    # values = [2048, 2549, 1110, 1400, 3072, g_open]
-    # x = 330
-    # y = 85
-    # end_angle = -30. / 180. * np.pi
-    # rx150.gogo(values, x, y, end_angle, 320, 90, end_angle, 3072, timestamp=300)
-
     rx150.torque(enable=1)
-    g_open = 1600
-    values = [1024, 2549, 1110, 1400, 0, g_open]
+    # g_open = 780
+    # g_open = 780
+    g_open = 780
+    values = [1300, 2549, 1110, 1400, 3072+4096, g_open]
     # x = 420
     # x = 380
-    x = 270
-    y = 90
-    end_angle = 0#-90*np.pi/180
-    # end_angle = 45*np.pi/180
+    x = 280
+    y = 120
+    end_angle = 0
     # 270 - 420
     inc = 1
-    rx150.gogo(values, x, y, end_angle, 0, timestamp=100)
+    rx150.gogo(values, x, y, end_angle, 3072+4096, timestamp=100)
 
-        #
-        # rx150.torque(enable=1)
-        # g_open = 1700
-        # values = [2048, 2549, 1110, 1400, 3072, g_open]
-        # x = 320
-        # y = 90
-        # end_angle = -30. / 180. * np.pi
-        # rx150.gogo(values, x, y, end_angle, 320, 90, end_angle, 3072, timestamp=300)
+    print(rx150.readpos_float())
 
-    # rx150.torque(enable=1)
-    # g_open = 1100
-    # values = [2048, 2549, 1110, 1400, 3072, g_open]
-    # x = 330
-    # y = 85
-    # end_angle = -80. / 180. * np.pi
-    # rx150.gogo(values, x, y, end_angle, 215, 210, end_angle, 3072, timestamp=300)
+def main_thread():
+    rx150_thread = RX150_Driver_Thread(port="/dev/ttyACM0", baudrate=1000000)
+    rx150_thread.rx150.torque(enable=1)
+    rx150_thread.start()
 
-    # rx150.torque(enable=1)
-    # g_open = 1100
-    # values = [2048, 2549, 1110, 1400, 3072, g_open]
-    # x = 210
-    # y = 150
-    # end_angle = -50. / 180. * np.pi
-    # # rx150.gogo(values, x, y, end_angle, 220, 140, end_angle, 3072, timestamp=300)
-    #
-    # c = input()
-    #
-    # rx150.torque(enable=1)
-    # g_open = 760
-    # values = [2048, 2549, 1110, 1400, 3072, g_open]
+    ################################### 90 degrees
+    # g_open = 1200
+    # values = [1024, 2549, 1110, 1400, 0, g_open]
     # x = 320
-    # y = 90
-    # end_angle = 30. / 180. * np.pi
-    # rx150.gogo(values, x, y, end_angle, 320, 90, end_angle, 3072, timestamp=300)
+    # y = 30
+    # end_angle = 90 / 180. * np.pi # in pi
+    # rx150_thread.rx150.gogo(values, x, y, end_angle, 0, timestamp=100)
+
+    ################################### 0 degrees
+    g_open = 1200
+    values = [1024, 2549, 1110, 1400, 0, g_open]
+    x = 320
+    y = 90
+    end_angle = 0 / 180. * np.pi # in pi
+    rx150_thread.rx150.gogo(values, x, y, end_angle, 0, timestamp=100)
+
+
+    for i in (list(range(30)) + list(range(30, -1, -1)))*1:
+        values = [1024, 2549, 1110, 1400, 100, g_open]
+        rx150_thread.gogo(values, x, y+i*2, end_angle, 0, timestamp=10)
+        time.sleep(0.05)
+
+
+    # for theta in (list(range(10)) + list(range(10, -1, -1)))*1:
+    #     theta = theta / 180. * np.pi
+    #     values = [1024+theta/np.pi*2048, 2549, 1110, 1400, 0, g_open]
+    #     rx150_thread.gogo(values, x / np.cos(theta), y, end_angle, theta/np.pi*2048, timestamp=5)
+    #     time.sleep(0.05)
+
+    rx150_thread.running = False
+    rx150_thread.join()
+
+if __name__ == "__main__":
+    # main_thread()
+    main()

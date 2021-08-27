@@ -49,6 +49,7 @@ def read_csv(filename=f"config/config_{sensor_id}.csv"):
 TOPLEFT, TOPRIGHT, BOTTOMLEFT, BOTTOMRIGHT = tuple(read_csv())
 
 cnt = 0
+last_tm = 0
 # n, m = 48, 48
 # n, m = 300, 300
 diff_thresh = 5
@@ -58,6 +59,7 @@ image_peak = None
 flag_recording = False
 dirname = "cali_data_1/"
 
+frames = []
 last_frame = None
 
 while True:
@@ -83,13 +85,16 @@ while True:
     diff = ((im * 1.0 - frame0)) / 255.0 + 0.5
     cv2.imshow("warped", cv2.resize((diff - 0.5) * 4 + 0.5, (m, n)))
 
+    last_tm = time.time()
 
-    # if last_frame is not None and np.sum(last_frame - im_raw) != 0:
-    #     print("new frame")
-    # last_frame = im_raw.copy()
+    if last_frame is not None and np.sum(last_frame - im_raw) != 0:
+        frames.append(im_raw)
+    last_frame = im_raw.copy()
 
     c = cv2.waitKey(1)
     if c == ord("q"):
         break
 
+print(len(frames))
+dd.io.save("data/touch/fabric_test.h5", frames)
 cv2.destroyAllWindows()

@@ -12,15 +12,15 @@ def read_logs(filename):
 def draw(logs):
     ur_xy = []
     # cable_xy = []
-    fabric_x0 = []
-    fabric_y0 = []
+    fabric_xs = []
+    fabric_ys = []
     thetas = []
     ur_v = []
     x = []
     y = []
     dt = []
 
-    for i in range(20, len(logs)):
+    for i in range(8, len(logs)):
         log = logs[i]
         ur_pose = log['ur_pose']
         theta = log['theta']
@@ -34,6 +34,8 @@ def draw(logs):
         # cable_xy.append(cable_center)
         ur_v.append([ur_velocity[0], ur_velocity[1]])
         dt.append(t_diff)
+        fabric_xs.append(fabric_x0)
+        fabric_ys.append(fabric_y0)
 
         x.append(ur_pose[0])
         y.append(ur_pose[1])
@@ -45,7 +47,7 @@ def draw(logs):
     # plt.figure()
     # plt.plot(thetas)
     # plt.show()
-    return ur_xy, fabric_x0, fabric_y0, thetas, ur_v, dt
+    return ur_xy, fabric_xs, fabric_ys, thetas, ur_v, dt
 
 def remove_end(x):
     return x[1:-1]
@@ -61,7 +63,7 @@ def parse(logs):
     pose0 = np.array([-0.505, -0.219, 0.235])
     fixpoint_x = pose0[0] #+ 0.006 #0.0178 # - 15e-3
     fixpoint_y = pose0[1] - 0.12 #0.039 #0.0382 # 0.2 measure distance between 2 grippers at pose0
-    fabric_x = 0.05 - fabric_x0 + 0.5*(1-2*fabric_y0)*np.tan(thetas)
+    fabric_x = 0.05 - np.array(fabric_x0) + 0.5*(1-2*np.array(fabric_y0))*np.tan(thetas)
     alpha = np.arctan((np.array(ur_xy)[:, 0] - fixpoint_x) / (np.array(ur_xy)[:, 1] - fixpoint_y)) * np.cos(np.pi * 30 / 180)
 
     ur_v = np.asarray(ur_v)
@@ -132,17 +134,26 @@ def loadall():
     X, Y = np.empty((0,4), np.float32), np.empty((0,3), np.float32)
     # for filename in glob.glob('logs/1908290930/*.p'):
     # for filename in glob.glob('data/logs/20210503/*.p'):
-    for filename in glob.glob('data/logs/20210611_30/*.p'):
+    # for filename in glob.glob('data/logs/20210806_linear/*.p'):
     # for filename in glob.glob('data/logs/20210629_tvlqr/*.p'):
+    for filename in glob.glob('data/logs/20210611_30/*.p'):
         # print(filename)
         logs = read_logs(filename)
-        try:
-            print(filename)
-            x, y = parse(logs)
-            X = np.vstack([X, x])
-            Y = np.vstack([Y, y])
-        except:
-            print("lost one")
+        x, y = parse(logs)
+        X = np.vstack([X, x])
+        Y = np.vstack([Y, y])
+    for filename in glob.glob('data/logs/20210624_linear/*.p'):
+        logs = read_logs(filename)
+        x, y = parse(logs)
+        X = np.vstack([X, x])
+        Y = np.vstack([Y, y])
+    for filename in glob.glob('data/logs/20210624_tvlqr/*.p'):
+        logs = read_logs(filename)
+        x, y = parse(logs)
+        X = np.vstack([X, x])
+        Y = np.vstack([Y, y])
+        # except:
+            # print("lost one")
         # break
     # for filename in glob.glob('data/logs/initialtesting/linearGPLQR/*.p'):
     #     logs = read_logs(filename)

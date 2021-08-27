@@ -79,6 +79,7 @@ def test_combined():
         cv2.imshow("marker", tracking_img)
         cv2.imshow("mask", gs.tc.mask*1.0)
         cv2.imshow("diff", gs.tc.diff_raw / 255)
+        # cv2.imshow("depth", gs.pc.depth / 8.)
 
         c = cv2.waitKey(1) & 0xFF
         if c == ord("q"):

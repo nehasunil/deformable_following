@@ -13,7 +13,7 @@ from dynamixel_sdk import *
 class Gripper_Controller(Thread):
     def __init__(self):
         Thread.__init__(self)
-        self.gripper_helper = GripperHelper(DXL_ID=1, min_position=938, max_position=2600)
+        self.gripper_helper = GripperHelper(DXL_ID=1, min_position=938, max_position=2700)
         self.follow_gripper_pos = 0.
         self.flag_terminate = False
 

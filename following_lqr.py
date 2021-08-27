@@ -26,7 +26,8 @@ grc = Gripper_Controller()
 urc.start()
 grc.start()
 
-pose0 = np.array([-0.505-.1693, -0.219, 0.235, -1.129, -1.226, 1.326])
+# pose0 = np.array([-0.505-.1693, -0.219, 0.235, -1.129, -1.226, 1.326])
+pose0 = np.array([-0.667, -0.196, 0.228, 1.146, -1.237, -1.227])
 grc.gripper_helper.set_gripper_current_limit(0.6)
 
 
@@ -34,12 +35,15 @@ rx150 = RX150_Driver(port="/dev/ttyACM0", baudrate=1000000)
 rx150.torque(enable=1)
 print(rx150.readpos())
 
+ang = 30
+# ang = -90
+
 def rx_move(g_open):
     values = [2048, 2549, 1110, 1400, 3072, g_open]
     x = 320
     y = 90
-    end_angle = -30. / 180. * np.pi
-    rx150.gogo(values, x, y, end_angle, 320, 90, end_angle, 3072, timestamp=30)
+    end_angle = -ang / 180. * np.pi
+    rx150.gogo(values, x, y, end_angle, 3072, timestamp=30)
 
 def rx_regrasp():
     rx_move(890)
@@ -47,7 +51,7 @@ def rx_regrasp():
     values = [2048, 2549, 1110, 1400, 3072, 890]
     x = 335
     y = 95
-    end_angle = -30. / 180. * np.pi
+    end_angle = -ang / 180. * np.pi
     rx150.gogo(values, x, y, end_angle, x, y, end_angle, 3072, timestamp=30)
     time.sleep(0.5)
     values[-1] = 760
@@ -162,19 +166,20 @@ def test_combined():
             v = 0.02
 
             fixpoint_x = pose0[0]
-            fixpoint_y = pose0[1] - 0.08
+            fixpoint_y = pose0[1] - 0.133
             pixel_size = 0.2e-3
             ur_pose = urc.getl_rt()
             ur_xy = np.array(ur_pose[:2])
 
-            x = 0.05 - pose[0] + 0.5 * (1 - 2*pose[1])*np.tan(pose[2])
-            alpha = np.arctan(ur_xy[0] - fixpoint_x)/(ur_xy[1] - fixpoint_y) * np.cos(np.pi * 30 / 180)
+            x = 0.1 - pose[0] - 0.5 * (1 - 2*pose[1])*np.tan(pose[2])
+            alpha = np.arctan(ur_xy[0] - fixpoint_x)/(ur_xy[1] - fixpoint_y) * np.cos(np.pi * ang / 180)
 
             print("x: ", x, "; input: ", x*pixel_size)
 
             # K = np.array([6528.5, 0.79235, 2.18017]) #10 degrees
             # K = np.array([7012, 8.865, 6.435]) #30 degrees
-            K = np.array([1383, 3.682, 3.417])
+            # K = np.array([1383, 3.682, 3.417])
+            K = np.array([862689, 42.704, 37.518])
 
             state = np.array([[x*pixel_size],[pose[2]],[alpha]])
             phi = -K.dot(state)
@@ -189,8 +194,8 @@ def test_combined():
             target_ur_dir = max(-limit_phi, min(target_ur_dir, limit_phi))
             if abs(target_ur_dir) == limit_phi:
                 print("reached phi limit")
-            v_norm = 0.01
-            vel = np.array([v_norm * sin(target_ur_dir)*cos(np.pi * 30 / 180), v_norm * cos(target_ur_dir), v_norm * sin(target_ur_dir)*sin(np.pi * -30 / 180), 0, 0, 0])
+            v_norm = 0.02
+            vel = np.array([v_norm * sin(target_ur_dir)*cos(np.pi * ang / 180), v_norm * cos(target_ur_dir), v_norm * sin(target_ur_dir)*sin(np.pi * -ang / 180), 0, 0, 0])
 
             # if x < -0.2:
             #     print("regrasp")
@@ -199,10 +204,10 @@ def test_combined():
             if ur_pose[0] < -0.7-.1693:
                 vel[0] = max(vel[0], 0.)
                 print("reached x limit")
-            if ur_pose[0] > -0.3-.1693:
+            if ur_pose[0] > -0.4-.1693:
                 vel[0] = min(vel[0], 0.)
                 print("reached x limit")
-            if ur_pose[2] < .08:
+            if ur_pose[2] < .15:
                 vel[2] = 0.
                 print("reached z limit")
             if ur_pose[1] > .34:
@@ -285,7 +290,4 @@ def test_combined():
 
 
 if __name__ == "__main__":
-    try:
-        test_combined()
-    finally:
-        del gs
+    test_combined()

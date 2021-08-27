@@ -38,44 +38,67 @@ train_idx = idx[:int(N * 0.8)]
 test_idx = idx[int(N * 0.8):]
 X_train, Y_train = X[train_idx], Y[train_idx]
 
-kernel1 = GPy.kern.Matern32(input_dim=4,ARD=True,initialize=False)
-m1 = GPy.models.SparseGPRegression(X_train, Y_train[:, 0].reshape(Y_train.shape[0], 1), kernel1, num_inducing=500, initialize=False)
-m1.update_model(False)
-m1.initialize_parameter()
-m1[:] = np.load('./controller/GP/m1_m32_a_80_500i_05.npy')
-m1.update_model(True)
+# kernel1 = GPy.kern.Linear(input_dim=4,ARD=True,initialize=False)
+# m1 = GPy.models.SparseGPRegression(X_train, Y_train[:, 0].reshape(Y_train.shape[0], 1), kernel1, num_inducing=500, initialize=False)
+# m1.update_model(False)
+# m1.initialize_parameter()
+# m1[:] = np.load('./controller/GP/m1_lin_80_500i.npy')
+# m1.update_model(True)
 
 kernel2 = GPy.kern.Exponential(input_dim=4, ARD=True, initialize=False)
 m2 = GPy.models.SparseGPRegression(X_train, Y_train[:, 1].reshape(Y_train.shape[0], 1), kernel2, num_inducing=500, initialize=False)
 m2.update_model(False)
 m2.initialize_parameter()
-m2[:] = np.load('./controller/GP/m2_exp_a_80_500i_05.npy')
+m2[:] = np.load('./controller/GP/m2_exp_80_500i.npy')
 m2.update_model(True)
 
 kernel3 = GPy.kern.Exponential(input_dim=4, ARD=True, initialize=False)
 m3 = GPy.models.SparseGPRegression(X_train, Y_train[:, 2].reshape(Y_train.shape[0], 1), kernel3, num_inducing=500, initialize=False)
 m3.update_model(False)
 m3.initialize_parameter()
-m3[:] = np.load('./controller/GP/m3_exp_a_80_500i_05.npy')
+m3[:] = np.load('./controller/GP/m3_exp_80_500i.npy')
 m3.update_model(True)
+
+# def tv_linA(x):
+#     m = 3
+#     model = [m1, m2, m3]
+#     A = np.zeros((m, m))
+#     for i in range(m):
+#         grad = model[i].predictive_gradients(np.array([x]))
+#         for j in range(m):
+#             A[i][j] = grad[0][0][j]
+#     return A
+#
+# def tv_linB(x):
+#     m = 3
+#     model = [m1, m2, m3]
+#     B = np.zeros((m, 1))
+#     for i in range(m):
+#         grad = model[i].predictive_gradients(np.array([x]))
+#         B[i, 0] = grad[0][0][3]
+#     return B
 
 def tv_linA(x):
     m = 3
-    model = [m1, m2, m3]
+    model = [m2, m2, m3]
     A = np.zeros((m, m))
-    for i in range(m):
+    for i in range(1, m):
         grad = model[i].predictive_gradients(np.array([x]))
         for j in range(m):
             A[i][j] = grad[0][0][j]
+    A[0][0] = 9.0954e-02
+    A[0][1] = 4.2307e-06
+    A[0][2] = 4.77888e-06
     return A
 
 def tv_linB(x):
     m = 3
-    model = [m1, m2, m3]
+    model = [m2, m2, m3]
     B = np.zeros((m, 1))
-    for i in range(m):
+    for i in range(1, m):
         grad = model[i].predictive_gradients(np.array([x]))
         B[i, 0] = grad[0][0][3]
+    B[0][0] = -4.700e-07
     return B
 
 
@@ -85,7 +108,8 @@ grc = Gripper_Controller()
 urc.start()
 grc.start()
 
-pose0 = np.array([-0.505-.1693, -0.219, 0.235, -1.129, -1.226, 1.326])
+# pose0 = np.array([-0.505-.1693, -0.219, 0.235, -1.129, -1.226, 1.326])
+pose0 = np.array([-0.667, -0.196, 0.228, 1.146, -1.237, -1.227])
 grc.gripper_helper.set_gripper_current_limit(0.6)
 
 
@@ -98,7 +122,7 @@ def rx_move(g_open):
     x = 320
     y = 90
     end_angle = -30. / 180. * np.pi
-    rx150.gogo(values, x, y, end_angle, 320, 90, end_angle, 3072, timestamp=30)
+    rx150.gogo(values, x, y, end_angle, 3072, timestamp=30)
 
 # rx_move(2000)
 
@@ -202,20 +226,19 @@ def test_combined():
             a = 0.02
             v = 0.02
 
+
             fixpoint_x = pose0[0]
-            fixpoint_y = pose0[1] - 0.08
+            fixpoint_y = pose0[1] - 0.133
             pixel_size = 0.2e-3
             ur_pose = urc.getl_rt()
             ur_xy = np.array(ur_pose[:2])
 
-            x = 0.05 - pose[0] + 0.5 * (1 - 2*pose[1])*np.tan(pose[2])
+            x = 0.1 - pose[0] - 0.5 * (1 - 2*pose[1])*np.tan(pose[2])
             alpha = np.arctan(ur_xy[0] - fixpoint_x)/(ur_xy[1] - fixpoint_y) * np.cos(np.pi * 30 / 180)
 
-            print("x: ", x, "; input: ", x*pixel_size)
-            print("theta: ", pose[2] * 180/np.pi)
+            # print("x: ", x, "; input: ", x*pixel_size)
+            # print("theta: ", pose[2] * 180/np.pi)
 
-            # K = np.array([6528.5, 0.79235, 2.18017]) #10 degrees
-            # K = np.array([7012, 8.865, 6.435]) #30 degrees
 
             state = np.array([[x*pixel_size],[pose[2]],[alpha]])
             # phi = -K.dot(state)
@@ -226,7 +249,13 @@ def test_combined():
             x0[0], x0[1], x0[2] = state[0, 0], state[1, 0], state[2, 0]
             A = tv_linA(x0)
             B = tv_linB(x0)
-            K,S,E = ctrl.lqr(A, B, Q, R)
+            try:
+                K,S,E = ctrl.lqr(A, B, Q, R)
+                print(K)
+            except:
+                print("LQR ERROR!!!!")
+                K = np.array([862689, 42.704, 37.518])
+            # K = np.array([862689, 42.704, 37.518])
             phi = -K.dot(state)
             print(phi)
 
@@ -267,7 +296,7 @@ def test_combined():
             # print("sliding vel ", vel[0], "posx ", pos_x)
 
             vel = np.array(vel)
-            urc.speedl(vel, a=a, t=dt*10)
+            urc.speedl(vel, a=a, t=dt*7)
 
             time.sleep(dt)
 

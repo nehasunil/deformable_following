@@ -16,10 +16,12 @@ class UR_Controller(Thread):
         self.s.connect((HOST, PORT))
 
         self.flag_terminate = False
+        self.pose_following = None
 
         # Check whether the robot has reach the target pose
         self.last_p = []
         self.len_p = 10
+        self.total_error = 0
 
     def getl_rt(self):
         # get current pose with urx urrtmon with 125 Hz
@@ -67,6 +69,19 @@ class UR_Controller(Thread):
                 break
             time.sleep(0.02)
 
+    def follow(self):
+        if self.pose_following is None:
+            return
+        cur_pose = self.getl_rt()
+        error = self.pose_following - cur_pose
+        kp = 5
+        ki = 0.1
+        self.total_error = self.total_error * 0.9 + error
+        v = error * kp + self.total_error * ki
+        cmd = np.zeros(6)
+        cmd[:3] = v[:3]
+        print("cur", cur_pose[2], "goal", self.pose_following[2])
+        self.speedl(cmd, a=1, t=0.05)
 
     def movel_nowait(self, pose, a=1, v=0.04):
         # linear move in tool space and wait
@@ -92,11 +107,42 @@ class UR_Controller(Thread):
 
     def run(self):
         while not self.flag_terminate:
-            time.sleep(1)
+            self.follow()
+            time.sleep(0.01)
+        self.rob.close()
 
-if __name__ == "__main__":
+
+def main():
 	urc = UR_Controller()
 	urc.start()
-	for i in range(10):
-		print(urc.getl_rt())
-		time.sleep(0.01)
+
+	pose0 = np.array([-0.431, 0.05, 0.21, -2.23, -2.194, -0.019])
+	urc.movel_wait(pose0)
+	time.sleep(2)
+	pose = pose0.copy()
+	for i in range(120):
+		# print(urc.getl_rt())
+		pose[2] = pose0[2] + np.sin(i / 40 * np.pi) * 0.03
+		urc.pose_following = pose
+		time.sleep(0.05)
+	urc.flag_terminate = True
+	urc.join()
+
+def test_thread():
+	urc = UR_Controller()
+	urc.start()
+
+	pose0 = np.array([-0.431, 0.05, 0.21, -2.23, -2.194, -0.019])
+	urc.movel_wait(pose0)
+	time.sleep(2)
+	pose = pose0.copy()
+	for i in range(120):
+		# print(urc.getl_rt())
+		pose[2] = pose0[2] + np.sin(i / 40 * np.pi) * 0.03
+		urc.pose_following = pose
+		time.sleep(0.05)
+	urc.flag_terminate = True
+	urc.join()
+
+if __name__ == "__main__":
+    test_thread()
