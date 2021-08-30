@@ -1,3 +1,7 @@
 00*.png
 *.pyc
 data
+*.pth
+perception/fabric-pose/results
+perception/fabric-pose/models
+perception/fabric-pose/data
